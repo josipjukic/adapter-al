@@ -241,468 +241,12 @@ class Experiment:
 
                 # b) Evaluate model (test set)
                 eval_result_dict = self._evaluate_model(model)
-                repr_stats = self._representation_stats(model, indices)
-                # if selected_inds is not None:
-                #     sample_repr = self._representation_stats(model, selected_inds)
-                #     eval_result_dict["sample_repr"] = sample_repr
-
-                eval_result_dict["repr"] = repr_stats
-                besov.append(np.mean(repr_stats["alpha"]))
-                acc.append(eval_result_dict["accuracy"])
-                loss.append(result_dict_train["loss"])
-                eval_results.append(eval_result_dict)
-
-                if break_:
-                    break
-
-                if self.args.besov and epoch > 5:
-                    besov_layers = softmax(repr_stats["alpha"])
-                    besov_middle_layers = besov_layers[4:8]
-                    besov_last_layers = besov_layers[8:]
-
-                    middle_mass = besov_middle_layers.sum()
-                    end_mass = besov_last_layers.sum()
-                    if middle_mass > end_mass:
-                        break_ = True
-
-            wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
-
-            # if self.args.besov:
-            #     num_epochs = max(5, np.argmax(besov) + 1)
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Besov-optimal epoch]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.best:
-            #     num_epochs = np.argmax(acc) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Best epoch strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.loss:
-            #     num_epochs = np.argmin(loss) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Loss strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-
-            # 2) Retrieve active sample.
-            if not lab_mask.all():
-                logging.info("Retrieving AL sample...")
-                lab_inds, *_ = np.where(lab_mask)
-                unlab_inds, *_ = np.where(~lab_mask)
-                if len(unlab_inds) <= query_size:
-                    selected_inds = unlab_inds
-                else:
-                    model.eval()
-                    selected_inds = self.sampler.query(
-                        query_size=query_size,
-                        unlab_inds=unlab_inds,
-                        lab_inds=lab_inds,
-                        model=model,
-                        lab_mask=lab_mask,
-                        num_labels=self.meta.num_labels,
-                        num_targets=self.meta.num_targets,
-                        criterion=criterion,
-                        device=self.device,
-                    )
-
-                lab_mask[selected_inds] = True
-                results["selected"].append(selected_inds)
-                logging.info(f"{len(selected_inds)} data points selected.")
-                untrained_sample_repr = self._representation_stats(model, selected_inds)
-                results["untrained"].append(untrained_sample_repr)
-
-            # 3) Store results.
-            results["train"].append(train_results)
-            results["eval"].append(eval_results)
-
-        return results
-
-    def besov_al(
-        self,
-        create_model_fn,
-        criterion,
-        warm_start_size,
-        query_size,
-        tokenizer,
-    ):
-
-        selected_examples = []
-        selected_inds = None
-
-        # if self.args.load_cartography:
-        #     crt_train = pd.read_csv(
-        #         os.path.join(self.args.load_cartography, f"{self.args.model}.csv"),
-        #         index_col=0,
-        #     )
-        #     hard_inds = crt_train[
-        #         (crt_train.correctness == 0) | (crt_train.correctness == 1)
-        #     ]
-        #     if self.args.prop_hard < 1.0 and self.args.prop_hard >= 0.0:
-        #         hard_remove = hard_inds.sample(frac=1.0 - self.args.prop_hard)
-        #         mask = np.full(len(self.train_set), True)
-        #         mask[hard_remove.index] = False
-        #         self.train_set = self.train_set[mask]
-
-        # Initialize label mask.
-        lab_mask = np.full(len(self.train_set), False)
-        if self.args.stratified:
-            train_iter = make_iterable(
-                self.train_set,
-                self.device,
-                batch_size=self.batch_size,
-                train=False,
-            )
-            labels = []
-            with torch.no_grad():
-                for batch in train_iter:
-                    labels.append(batch.label.squeeze())
-            y = torch.cat(labels).cpu().numpy()
-            num_classes = y.max() + 1
-            n_per_class = warm_start_size // num_classes
-            random_inds = []
-            for i in range(num_classes):
-                y_i = y == i
-                indices = np.nonzero(y_i)[0].ravel()
-                chosen = np.random.choice(
-                    indices, np.minimum(n_per_class, indices.size), replace=False
-                )
-                random_inds.append(chosen)
-            random_inds = np.concatenate(random_inds)
-            left = warm_start_size - len(random_inds)
-            if left > 0:
-                rest = np.setdiff1d(np.arange(len(self.train_set)), random_inds)
-                chosen = np.random.choice(rest, left, replace=False)
-                random_inds = np.concatenate([random_inds, chosen])
-
-        else:
-            random_inds = np.random.choice(
-                len(self.train_set), warm_start_size, replace=False
-            )
-        lab_mask[random_inds] = True
-
-        al_epochs = self.args.al_epochs
-        if al_epochs == -1:
-            unlab_size = self.args.max_train_size - lab_mask.sum()
-            al_epochs = np.int(np.ceil(unlab_size / query_size)) + 1
-
-        results = {
-            "train": [],
-            "eval": [],
-            "untrained": [],
-            "labeled": [],
-            "selected": [random_inds],
-            "grads": [],
-        }
-
-        for al_epoch in range(1, al_epochs + 1):
-            logging.info(f"AL epoch: {al_epoch}/{al_epochs}")
-            results["labeled"].append(lab_mask.sum())
-
-            # 1) Train model with labeled data: fine-tune vs. re-train
-            logging.info(
-                f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data..."
-            )
-            # Create new model: re-train scenario.
-            if self.args.pretrain:
-                model = create_model_fn(self.args, self.meta, pretrained=True)
-
-            else:
-                model = create_model_fn(self.args, self.meta)
-
-            model.to(self.device)
-
-            indices, *_ = np.where(lab_mask)
-            train_iter = make_iterable(
-                self.train_set,
-                self.device,
-                batch_size=self.batch_size,
-                train=True,
-                indices=indices,
-            )
-
-            optimizer = torch.optim.AdamW(
-                model.parameters(), lr=self.args.lr, weight_decay=self.args.l2
-            )
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer,
-                step_size=10,
-                gamma=0.1,
-            )
-            train_results = []
-            eval_results = []
-            besov = []
-            acc = []
-            loss = []
-
-            for epoch in range(1, self.args.epochs + 1):
-                logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
-                # a) Train for one epoch
-                result_dict_train, logits, y_true, ids = self._train_model(
-                    model, optimizer, criterion, train_iter
-                )
-                if self.args.scheduler:
-                    scheduler.step()
-                print(result_dict_train)
-                train_results.append(result_dict_train)
-
-                # b) Evaluate model (test set)
-                eval_result_dict = self._evaluate_model(model)
-                repr_stats = self._representation_stats(model, indices)
-                # if selected_inds is not None:
-                #     sample_repr = self._representation_stats(model, selected_inds)
-                #     eval_result_dict["sample_repr"] = sample_repr
-
-                eval_result_dict["repr"] = repr_stats
-                besov.append(np.mean(repr_stats["alpha"]))
-                acc.append(eval_result_dict["accuracy"])
-                loss.append(result_dict_train["loss"])
-                eval_results.append(eval_result_dict)
-
-                if self.args.besov and epoch > 5:
-                    besov_layers = softmax(repr_stats["alpha"])
-                    besov_middle_layers = besov_layers[4:8]
-                    besov_last_layers = besov_layers[8:]
-
-                    middle_mass = besov_middle_layers.sum()
-                    end_mass = besov_last_layers.sum()
-                    if middle_mass > end_mass:
-                        break
-
-            wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
-
-            # if self.args.besov:
-            #     num_epochs = max(5, np.argmax(besov) + 1)
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Besov-optimal epoch]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.best:
-            #     num_epochs = np.argmax(acc) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Best epoch strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.loss:
-            #     num_epochs = np.argmin(loss) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Loss strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-
-            # 2) Retrieve active sample.
-            if not lab_mask.all():
-                logging.info("Retrieving AL sample...")
-                lab_inds, *_ = np.where(lab_mask)
-                unlab_inds, *_ = np.where(~lab_mask)
-                if len(unlab_inds) <= query_size:
-                    selected_inds = unlab_inds
-                else:
-                    best = None
-                    for sampler in self.sampler:
-                        print(f"Sample {sampler}")
-                        model.eval()
-                        candidates = sampler.query(
-                            query_size=query_size,
-                            unlab_inds=unlab_inds,
-                            lab_inds=lab_inds,
-                            model=model,
-                            lab_mask=lab_mask,
-                            num_labels=self.meta.num_labels,
-                            num_targets=self.meta.num_targets,
-                            criterion=criterion,
-                            device=self.device,
-                        )
-                        sample_besov = self._representation_stats(model, candidates)
-                        sample_besov = np.mean(sample_besov["alpha"])
-                        if best is None or sample_besov < best[1]:
-                            print(f"New best: {sampler}")
-                            best = (candidates, sample_besov)
-                    selected_inds = best[0]
-
-                lab_mask[selected_inds] = True
-                results["selected"].append(selected_inds)
-                logging.info(f"{len(selected_inds)} data points selected.")
-                untrained_sample_repr = self._representation_stats(model, selected_inds)
-                results["untrained"].append(untrained_sample_repr)
-
-            # 3) Store results.
-            results["train"].append(train_results)
-            results["eval"].append(eval_results)
-
-        return results
-
-    def run_baseline(
-        self,
-        create_model_fn,
-        criterion,
-        warm_start_size,
-        query_size,
-        tokenizer,
-    ):
-
-        selected_examples = []
-        selected_inds = None
-
-        lab_mask = np.full(len(self.train_set), False)
-        if self.args.stratified:
-            train_iter = make_iterable(
-                self.train_set,
-                self.device,
-                batch_size=self.batch_size,
-                train=False,
-            )
-            labels = []
-            with torch.no_grad():
-                for batch in train_iter:
-                    labels.append(batch.label.squeeze())
-            y = torch.cat(labels).cpu().numpy()
-            num_classes = y.max() + 1
-            n_per_class = warm_start_size // num_classes
-            random_inds = []
-            for i in range(num_classes):
-                y_i = y == i
-                indices = np.nonzero(y_i)[0].ravel()
-                chosen = np.random.choice(
-                    indices, np.minimum(n_per_class, indices.size), replace=False
-                )
-                random_inds.append(chosen)
-            random_inds = np.concatenate(random_inds)
-            left = warm_start_size - len(random_inds)
-            if left > 0:
-                rest = np.setdiff1d(np.arange(len(self.train_set)), random_inds)
-                chosen = np.random.choice(rest, left, replace=False)
-                random_inds = np.concatenate([random_inds, chosen])
-
-        else:
-            random_inds = np.random.choice(
-                len(self.train_set), warm_start_size, replace=False
-            )
-        lab_mask[random_inds] = True
-
-        al_epochs = self.args.al_epochs
-        if al_epochs == -1:
-            unlab_size = self.args.max_train_size - lab_mask.sum()
-            al_epochs = np.int(np.ceil(unlab_size / query_size)) + 1
-
-        results = {
-            "train": [],
-            "eval": [],
-            "untrained": [],
-            "labeled": [],
-            "selected": [random_inds],
-            "grads": [],
-        }
-
-        for al_epoch in range(1, al_epochs + 1):
-            logging.info(f"AL epoch: {al_epoch}/{al_epochs}")
-            results["labeled"].append(lab_mask.sum())
-
-            # 1) Train model with labeled data: fine-tune vs. re-train
-            logging.info(
-                f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data..."
-            )
-            # Create new model: re-train scenario.
-            if self.args.pretrain:
-                model = create_model_fn(self.args, self.meta, pretrained=True)
-
-            else:
-                model = create_model_fn(self.args, self.meta)
-
-            model.to(self.device)
-
-            indices, *_ = np.where(lab_mask)
-            train_iter = make_iterable(
-                self.train_set,
-                self.device,
-                batch_size=self.batch_size,
-                train=True,
-                indices=indices,
-            )
-
-            optimizer = torch.optim.AdamW(
-                model.parameters(), lr=self.args.lr, weight_decay=self.args.l2
-            )
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer,
-                step_size=10,
-                gamma=0.1,
-            )
-            train_results = []
-            eval_results = []
-            besov = []
-            acc = []
-            loss = []
-
-            break_ = False
-            for epoch in range(1, self.args.epochs + 1):
-                logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
-                # a) Train for one epoch
-                result_dict_train, logits, y_true, ids = self._train_model(
-                    model, optimizer, criterion, train_iter
-                )
-                if self.args.scheduler:
-                    scheduler.step()
-                print(result_dict_train)
-                train_results.append(result_dict_train)
-
-                # b) Evaluate model (test set)
-                eval_result_dict = self._evaluate_model(model)
                 # repr_stats = self._representation_stats(model, indices)
                 # if selected_inds is not None:
                 #     sample_repr = self._representation_stats(model, selected_inds)
                 #     eval_result_dict["sample_repr"] = sample_repr
 
-                eval_result_dict["repr"] = {}
+                # eval_result_dict["repr"] = repr_stats
                 # besov.append(np.mean(repr_stats["alpha"]))
                 acc.append(eval_result_dict["accuracy"])
                 loss.append(result_dict_train["loss"])
@@ -722,6 +266,49 @@ class Experiment:
                 #         break_ = True
 
             wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
+
+            # if self.args.besov:
+            #     num_epochs = max(5, np.argmax(besov) + 1)
+
+            #     model = create_model_fn(self.args, self.meta)
+            #     model.to(self.device)
+            #     for epoch in range(1, num_epochs + 1):
+            #         result_dict_train, logits, y_true, ids = self._train_model(
+            #             model, optimizer, criterion, train_iter
+            #         )
+            #         print(
+            #             f"[Besov-optimal epoch]: {epoch}/{num_epochs}",
+            #             end="\r",
+            #             flush=True,
+            #         )
+            # elif self.args.best:
+            #     num_epochs = np.argmax(acc) + 1
+
+            #     model = create_model_fn(self.args, self.meta)
+            #     model.to(self.device)
+            #     for epoch in range(1, num_epochs + 1):
+            #         result_dict_train, logits, y_true, ids = self._train_model(
+            #             model, optimizer, criterion, train_iter
+            #         )
+            #         print(
+            #             f"[Best epoch strategy]: {epoch}/{num_epochs}",
+            #             end="\r",
+            #             flush=True,
+            #         )
+            # elif self.args.loss:
+            #     num_epochs = np.argmin(loss) + 1
+
+            #     model = create_model_fn(self.args, self.meta)
+            #     model.to(self.device)
+            #     for epoch in range(1, num_epochs + 1):
+            #         result_dict_train, logits, y_true, ids = self._train_model(
+            #             model, optimizer, criterion, train_iter
+            #         )
+            #         print(
+            #             f"[Loss strategy]: {epoch}/{num_epochs}",
+            #             end="\r",
+            #             flush=True,
+            #         )
 
             # 2) Retrieve active sample.
             if not lab_mask.all():
@@ -755,6 +342,8 @@ class Experiment:
             results["eval"].append(eval_results)
 
         return results
+
+   
 
     def _representation_stats(self, model, indices):
 
@@ -914,297 +503,7 @@ class Experiment:
 
         return lm
 
-    # def expected_loss(
-    #     self,
-    #     create_model_fn,
-    #     criterion,
-    #     warm_start_size,
-    #     query_size,
-    #     tokenizer,
-    # ):
-
-    #     selected_examples = []
-    #     # Initialize label mask.
-    #     lab_mask = np.full(len(self.train_set), False)
-    #     # TODO: stratified warm start
-    #     random_inds = np.random.choice(
-    #         len(self.train_set), warm_start_size, replace=False
-    #     )
-    #     lab_mask[random_inds] = True
-
-    #     # al_epochs = self.args.al_epochs
-    #     # if al_epochs == -1:
-    #     #     unlab_size = self.args.max_train_size - lab_mask.sum()
-    #     #     al_epochs = np.int(np.ceil(unlab_size / query_size)) + 1
-
-    #     results = {
-    #         "train": [],
-    #         "eval": [],
-    #         "labeled": [],
-    #         "selected": [random_inds],
-    #         # "cartography": {"train": [], "test": []},
-    #     }
-
-    #     results["labeled"].append(lab_mask.sum())
-
-    #     # 1) Train model with labeled data: fine-tune vs. re-train
-    #     logging.info(f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data...")
-    #     # Create new model: re-train scenario.
-    #     model = create_model_fn(self.args, self.meta)
-    #     model.to(self.device)
-
-    #     indices, *_ = np.where(lab_mask)
-    #     train_iter = make_iterable(
-    #         self.train_set,
-    #         self.device,
-    #         batch_size=self.batch_size,
-    #         train=True,
-    #         indices=indices,
-    #     )
-
-    #     optimizer = torch.optim.AdamW(
-    #         model.parameters(), lr=self.args.lr, weight_decay=self.args.l2
-    #     )
-
-    #     print("Train iter:", len(train_iter))
-    #     for batch_num, batch in enumerate(train_iter, 1):
-    #         t = time.time()
-
-    #         optimizer.zero_grad()
-
-    #         # Unpack batch & cast to device
-    #         (x, lengths), y = batch.text, batch.label
-
-    #         logits, _ = model(x, lengths)
-
-    #         # Bookkeeping and cast label to float
-    #         # accuracy, confusion_matrix = Experiment.update_stats(
-    #         #     accuracy, confusion_matrix, logits, y
-    #         # )
-    #         if logits.shape[-1] == 1:
-    #             # binary cross entropy, cast labels to float
-    #             y = y.type(torch.float)
-
-    #         loss = criterion(
-    #             logits.view(-1, self.meta.num_targets).squeeze(), y.squeeze()
-    #         ).mean()
-
-    #         loss.backward()
-    #         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.clip)
-    #         optimizer.step()
-
-    #         print(
-    #             "[Batch]: {}/{} in {:.5f} seconds".format(
-    #                 batch_num, len(train_iter), time.time() - t
-    #             ),
-    #             end="\r",
-    #             flush=True,
-    #         )
-
-    #     train_iter = make_iterable(
-    #         self.train_set,
-    #         self.device,
-    #         batch_size=self.batch_size,
-    #         train=False,
-    #     )
-    #     train_results = []
-    #     eval_results = []
-    #     loss = []
-    #     for epoch in range(1, self.args.epochs + 1):
-    #         logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
-    #         # a) Train for one epoch
-    #         result_dict_train, logits, y_true = self._expected_loss_epoch(
-    #             model, optimizer, criterion, train_iter
-    #         )
-    #         loss.append(result_dict_train["loss_tensor"])
-    #         print(result_dict_train)
-    #         train_results.append(result_dict_train)
-
-    #     # 3) Store results.
-    #     results["train"].append(train_results)
-    #     results["eval"].append(eval_results)
-
-    #     loss = np.vstack(loss)
-    #     results["loss"] = loss
-
-    #     return results
-
-    # def repr_stats(
-    #     self,
-    #     create_model_fn,
-    #     criterion,
-    #     warm_start_size,
-    #     query_size,
-    #     tokenizer,
-    # ):
-
-    #     results = {
-    #         "train": [],
-    #         "eval": [],
-    #         "labeled": [],
-    #     }
-
-    #     # 1) Train model with labeled data: fine-tune vs. re-train
-    #     # Create new model: re-train scenario.
-    #     model = create_model_fn(self.args, self.meta)
-    #     model.to(self.device)
-
-    #     train_iter = make_iterable(
-    #         self.train_set,
-    #         self.device,
-    #         batch_size=self.batch_size,
-    #         train=True,
-    #     )
-
-    #     optimizer = torch.optim.AdamW(
-    #         model.parameters(), lr=self.args.lr, weight_decay=self.args.l2
-    #     )
-
-    #     print("Train iter:", len(train_iter))
-    #     for batch_num, batch in enumerate(train_iter, 1):
-    #         t = time.time()
-
-    #         optimizer.zero_grad()
-
-    #         # Unpack batch & cast to device
-    #         (x, lengths), y = batch.text, batch.label
-
-    #         logits, _ = model(x, lengths)
-
-    #         # Bookkeeping and cast label to float
-    #         # accuracy, confusion_matrix = Experiment.update_stats(
-    #         #     accuracy, confusion_matrix, logits, y
-    #         # )
-    #         if logits.shape[-1] == 1:
-    #             # binary cross entropy, cast labels to float
-    #             y = y.type(torch.float)
-
-    #         loss = criterion(
-    #             logits.view(-1, self.meta.num_targets).squeeze(), y.squeeze()
-    #         ).mean()
-
-    #         loss.backward()
-    #         torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.clip)
-    #         optimizer.step()
-
-    #         print(
-    #             "[Batch]: {}/{} in {:.5f} seconds".format(
-    #                 batch_num, len(train_iter), time.time() - t
-    #             ),
-    #             end="\r",
-    #             flush=True,
-    #         )
-
-    #     train_iter = make_iterable(
-    #         self.train_set,
-    #         self.device,
-    #         batch_size=self.batch_size,
-    #         train=False,
-    #     )
-    #     train_results = []
-    #     eval_results = []
-    #     loss = []
-
-    #     grads = []
-    #     vars_ = []
-    #     kurts = []
-    #     skews = []
-    #     enc = []
-    #     norms = []
-
-    #     jacobian = []
-    #     hessian = []
-    #     results = {
-    #         "train": [],
-    #         "eval": [],
-    #         "labeled": [],
-    #     }
-
-    #     for batch in train_iter:
-    #         inputs, lengths = batch.text
-    #         inputs.requires_grad = False
-    #         pad_idx = self.meta.padding_idx
-    #         attention_mask = inputs != pad_idx
-    #         clf = model.classifier.bert
-    #         config = model.classifier.config
-    #         embedded_tokens = clf.embeddings(inputs)
-    #         embedded_tokens = torch.autograd.Variable(
-    #             embedded_tokens, requires_grad=True
-    #         )
-    #         # head_mask = attention_mask.unsqueeze(0).unsqueeze(2).unsqueeze(-1)
-    #         # head_mask = head_mask.expand(
-    #         #     config.num_hidden_layers,
-    #         #     -1,
-    #         #     config.num_attention_heads,
-    #         #     -1,
-    #         #     attention_mask.shape[1],
-    #         # )
-    #         encoded = clf.encoder(
-    #             embedded_tokens,
-    #             # head_mask=head_mask,
-    #             # attention_mask=attention_mask,
-    #         )[0][:, 0]
-
-    #         encoder_fn = lambda t: clf.encoder(t)[0][:, 0].mean()
-    #         clf.encoder(
-    #             embedded_tokens,
-    #             # head_mask=head_mask,
-    #             # attention_mask=attention_mask,
-    #         )[0][:, 0]
-
-    #         enc.append(encoded.cpu())
-
-    #         mean = encoded.mean()
-    #         mean.backward()
-    #         enc_grad = embedded_tokens.grad.data
-    #         norm = enc_grad.norm(p=2, dim=-1)
-    #         grads.append(enc_grad.norm(p=2, dim=(1, 2)))
-    #         mean = torch.mean(norm, 1)
-    #         mean = mean.repeat_interleave(norm.shape[1]).reshape(-1, norm.shape[1])
-
-    #         diffs = norm - mean
-
-    #         var = torch.mean(torch.pow(diffs, 2.0), 1)
-    #         vars_.append(var)
-    #         std = torch.pow(var, 0.5)
-    #         std = std.repeat_interleave(diffs.shape[1]).reshape(-1, diffs.shape[1])
-    #         zscores = diffs / std
-    #         skew = torch.mean(torch.pow(zscores, 3.0), 1)
-    #         skews.append(skew)
-    #         kurtosis = torch.mean(torch.pow(zscores, 4.0), 1) - 3.0
-    #         kurts.append(kurtosis)
-    #         norms.append(norm)
-
-    #         for instance in batch:
-    #             jacobi = torch.autograd.functional.jacobian(encoder_fn, instance).mean()
-    #             jacobian.append(jacobi)
-    #             hesse = torch.autograd.functional.hessian(encoder_fn, instance).mean()
-    #             hessian.append(hesse)
-
-    #     # 3) Store results.
-    #     results["train"].append(train_results)
-    #     results["eval"].append(eval_results)
-
-    #     grad = torch.cat(grads).cpu()
-    #     var = torch.cat(vars_).cpu()
-    #     skew = torch.cat(skews).cpu()
-    #     kurt = torch.cat(kurts).cpu()
-    #     enc = torch.cat(enc).cpu()
-    #     dist = torch.cdist(enc, enc)
-    #     jacobian = torch.cat(jacobian).cpu()
-    #     hessian = torch.cat(hessian).cpu()
-
-    #     results["grad"] = grad
-    #     results["var"] = var
-    #     results["skew"] = skew
-    #     results["kurt"] = kurt
-    #     results["enc"] = enc
-    #     results["dist"] = dist
-    #     results["jacobian"] = jacobian
-    #     results["hessian"] = hessian
-
-    #     return results
-
+    
     def unbiased_loop(
         self, create_model_fn, criterion, warm_start_size, query_size, mode, tokenizer
     ):
@@ -1348,98 +647,7 @@ class Experiment:
 
         return results
 
-    def sklearn_al_loop(
-        self,
-        create_model_fn,
-        vectorizer,
-        warm_start_size,
-        query_size,
-    ):
-        # Initialize label mask.
-        lab_mask = np.full(len(self.train_set), False)
-        # TODO: stratified warm start
-        random_inds = np.random.choice(
-            len(self.train_set), warm_start_size, replace=False
-        )
-        lab_mask[random_inds] = True
-
-        al_epochs = self.args.al_epochs
-        if al_epochs == -1:
-            unlab_size = self.args.max_train_size - lab_mask.sum()
-            al_epochs = np.int(np.ceil(unlab_size / query_size)) + 1
-
-        results = {
-            "train": [],
-            "eval": [],
-            "labeled": [],
-            "cartography": {"train": [], "test": []},
-        }
-
-        for al_epoch in range(1, al_epochs + 1):
-            logging.info(f"AL epoch: {al_epoch}/{al_epochs}")
-            results["labeled"].append(lab_mask.sum())
-
-            # 1) Train model with labeled data: fine-tune vs. re-train
-            logging.info(
-                f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data..."
-            )
-            # Create new model: re-train scenario.
-            model = create_model_fn(self.args, self.meta)
-
-            indices, *_ = np.where(lab_mask)
-            X_train, y_train = make_sklearn_dataset(
-                self.train_set,
-                vectorizer=vectorizer,
-                indices=indices,
-            )
-
-            X_test, y_test = make_sklearn_dataset(
-                self.test_set,
-                vectorizer=vectorizer,
-            )
-
-            train_results = []
-            eval_results = []
-
-            model.fit(X_train, y_train.ravel())
-            y_pred = model.predict(X_test)
-
-            train_results.append({"loss": 0})
-
-            eval_result_dict = {"accuracy": accuracy_score(y_test, y_pred)}
-            eval_results.append(eval_result_dict)
-
-            print(f"[Accuracy] {eval_result_dict['accuracy']}")
-
-            # c) Calculate dataset cartography
-            # confidence = self._cartography_confidence(model, lab_mask)
-
-            # 2) Retrieve active sample.
-            if not lab_mask.all():
-                logging.info("Retrieving AL sample...")
-                lab_inds, *_ = np.where(lab_mask)
-                unlab_inds, *_ = np.where(~lab_mask)
-                if len(unlab_inds) <= query_size:
-                    selected_inds = unlab_inds
-                else:
-                    selected_inds = self.sampler.query(
-                        query_size=query_size,
-                        unlab_inds=unlab_inds,
-                        lab_inds=lab_inds,
-                        model=model,
-                        lab_mask=lab_mask,
-                        vectorizer=vectorizer,
-                    )
-
-                lab_mask[selected_inds] = True
-                logging.info(f"{len(selected_inds)} data points selected.")
-
-            # 3) Store results.
-            results["train"].append(train_results)
-            results["eval"].append(eval_results)
-
-        return results
-
+   
     def _pure(self, model, optimizer, criterion, train_iter, lab_inds, weights):
         model.train()
 
@@ -1571,58 +779,6 @@ class Experiment:
         y_true = torch.cat(y_true_list)
         return result_dict, logit_tensor, y_true
 
-    def _expected_loss_epoch(self, model, optimizer, criterion, train_iter):
-        model.train()
-
-        # criterion => reduction should be set to "none"
-        total_loss = 0.0
-        accuracy, confusion_matrix = 0, np.zeros(
-            (self.meta.num_labels, self.meta.num_labels), dtype=int
-        )
-
-        losses = []
-        with torch.no_grad():
-            for batch_num, batch in enumerate(train_iter, 1):
-                t = time.time()
-
-                # Unpack batch & cast to device
-                (x, lengths), y = batch.text, batch.label
-                y0 = torch.zeros_like(y)
-                y1 = torch.ones_like(y)
-
-                logits, _ = model(x, lengths)
-
-                # Bookkeeping and cast label to float
-                accuracy, confusion_matrix = Experiment.update_stats(
-                    accuracy, confusion_matrix, logits, y
-                )
-
-                if logits.shape[-1] == 1:
-                    # binary cross entropy, cast labels to float
-                    y0 = y0.type(torch.float)
-                    y1 = y1.type(torch.float)
-
-                loss = criterion(
-                    logits.view(-1, self.meta.num_targets).squeeze(), y0.squeeze()
-                ) + criterion(
-                    logits.view(-1, self.meta.num_targets).squeeze(), y1.squeeze()
-                )
-                losses.append(loss)
-
-                print(
-                    "[Batch]: {}/{} in {:.5f} seconds".format(
-                        batch_num, len(train_iter), time.time() - t
-                    ),
-                    end="\r",
-                    flush=True,
-                )
-
-        loss = total_loss / len(train_iter)
-        result_dict = {
-            "loss": loss,
-            "loss_tensor": torch.cat(losses).cpu().detach().numpy(),
-        }
-        return result_dict, None, None
 
     def _train_model(self, model, optimizer, criterion, train_iter):
         model.train()
@@ -2072,17 +1228,8 @@ class Experiment:
         create_model_fn,
         criterion,
     ):
-
-        # 1) Train model on labeled data.
         model = create_model_fn(self.args, self.meta)
         model.to(self.device)
-
-        # train_iter = make_iterable(
-        #     self.train_set,
-        #     self.device,
-        #     batch_size=self.batch_size,
-        #     train=False,  # No shuffling to ensure that same instances belong to the same block.
-        # )
 
         def cast_to_device(data):
             return torch.tensor(np.array(data), device=self.device)

@@ -1,6 +1,5 @@
 from functools import partial
 import os
-import itertools
 
 import pickle
 import numpy as np
@@ -9,7 +8,6 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.special import softmax
-from sklearn.linear_model import LinearRegression
 
 from al.sampler_mapping import AL_SAMPLERS
 
@@ -69,16 +67,6 @@ def al_auc(df, n=0):
     df_auc["micro_avg_std"] = df_auc.micro_avg.apply(np.std)
     df_auc["macro_avg_mean"] = df_auc.macro_avg.apply(np.mean)
     df_auc["macro_avg_std"] = df_auc.macro_avg.apply(np.std)
-    # df_auc.sort_values("acc_mean", ascending=False)
-
-    # df_exploded = df_auc.explode(["acc", "micro", "macro"])
-
-    # acc = pd.DataFrame({"score": df_exploded.acc, "metric": "accuracy"})
-    # micro = pd.DataFrame({"score": df_exploded.micro, "metric": "f1_micro"})
-    # macro = pd.DataFrame({"score": df_exploded.macro, "metric": "f1_macro"})
-    # df_plot = pd.concat([acc, micro, macro]).reset_index()
-    #     ax = sns.barplot(data=df_cat, x="sampler", y="score", hue="metric")
-    #     ax.tick_params(axis='x', rotation=30)
 
     return df_auc
 
@@ -146,39 +134,9 @@ def extract_ith_epoch(exp_set, besov_flag=False, epoch=-1):
         train_vals = [tr[epoch]["loss"] for tr in train]
         test = experiment["eval"]
         test_vals = [te[epoch]["accuracy"] for te in test]
-        besov_diff = []
-        means = []
-        for i, un in enumerate(experiment["untrained"]):
-            mean = np.mean(un["alpha"])
-            if len(besov_diff) > 0:
-                besov_diff.append(mean - means[i - 1])
-            else:
-                besov_diff.append(0)
-            means.append(mean)
-        besov = [
-            np.mean(un["alpha"] * np.flip(np.arange(len(un["alpha"]))))
-            for un in experiment["untrained"]
-        ]
-        # besov = [np.mean(un["alpha"]) for un in experiment["untrained"]]
-
-        # besov = [
-        #     np.mean(te[-1]["sample_repr"]["alpha"]) if "sample_repr" in te[-1] else 0
-        #     for te in test
-        # ]
-        # besov = [np.mean(te[-1]["repr"]["alpha"]) for te in test]
         labeled_vals = experiment["labeled"]
 
         iter_vals = list(range(len(labeled_vals)))
-
-        besov_scores = []
-        for i in range(len(labeled_vals)):
-            x = labeled_vals[: i + 1]
-            y = besov[: i + 1]
-            besov_scores.append(np.var(y))
-            # reg = LinearRegression()
-            # reg.fit(np.log(x).reshape(-1, 1), np.log(y))
-            # score = reg.coef_[0]
-            # besov_scores.append(score)
 
 
         df_tr = pd.DataFrame(
@@ -187,9 +145,6 @@ def extract_ith_epoch(exp_set, besov_flag=False, epoch=-1):
                 "labeled": labeled_vals,
                 "train_loss": train_vals,
                 "test_accuracy": test_vals,
-                "besov_index": besov,
-                "besov_score": besov_scores,
-                "besov_diff": besov_diff,
             }
         )
         df_tr["experiment"] = exp_index
@@ -210,53 +165,10 @@ def extract_last_epoch(exp_set):
         accs = [te[-1]["accuracy"] for te in test]
         f1_micro = [te[-1]["f1_micro"] for te in test]
         f1_macro = [te[-1]["f1_macro"] for te in test]
-        besov_layers = [te[-1]["repr"]["alpha"] for te in test]
-
-        # besov_diff = []
-        # means = []
-        # for i, un in enumerate(experiment["untrained"]):
-        #     mean = np.mean(un["alpha"])
-        #     if len(besov_diff) > 0:
-        #         besov_diff.append(mean - means[i - 1])
-        #     else:
-        #         besov_diff.append(0)
-        #     means.append(mean)
-        besov_weighted = [
-            np.mean(un["alpha"] * np.flip(np.arange(len(un["alpha"]))))
-            for un in experiment["untrained"]
-        ]
-        besov_mean = [np.mean(un["alpha"]) for un in experiment["untrained"]]
-        # besov = [np.mean(un["alpha"]) for un in experiment["untrained"]]
-
-        # besov = [
-        #     np.mean(te[-1]["sample_repr"]["alpha"]) if "sample_repr" in te[-1] else 0
-        #     for te in test
-        # ]
-        # besov = [np.mean(te[-1]["repr"]["alpha"]) for te in test]
 
         labeled_vals = experiment["labeled"]
         iter_vals = list(range(len(labeled_vals)))
 
-        # for i in range(len(labeled_vals)):
-        #     x = labeled_vals[: i + 1]
-        #     y = besov[: i + 1]
-        #     besov_scores.append(np.var(y))
-        # reg = LinearRegression()
-        # reg.fit(np.log(x).reshape(-1, 1), np.log(y))
-        # score = reg.coef_[0]
-        # besov_scores.append(score)
-
-        if len(besov_mean) < len(iter_vals):
-            besov_mean.append(np.nan)
-            besov_weighted.append(np.nan)
-
-        # print("iter", len(iter_vals))
-        # print("lab", len(labeled_vals))
-        # print("train", len(train_vals))
-        # print("acc", len(accs))
-        # print("bw", len(besov_weighted))
-        # print("bm", len(besov_mean))
-        # print("bl", len(besov_layers))
         df_tr = pd.DataFrame(
             {
                 "al_iter": iter_vals,
@@ -265,14 +177,9 @@ def extract_last_epoch(exp_set):
                 "test_accuracy": accs,
                 "f1_micro": f1_micro,
                 "f1_macro": f1_macro,
-                "besov_weighted": besov_weighted,
-                "besov_mean": besov_mean,
-                "besov_layers": besov_layers,
-                # "besov_diff": besov_diff,
             }
         )
 
-        df_tr["besov_normalized"] = df_tr.besov_layers.apply(softmax)
         df_tr["experiment"] = exp_index
         df_tr.set_index(["experiment", "al_iter"], inplace=True)
 
@@ -288,41 +195,19 @@ def extract_best_epoch(exp_set):
         train = experiment["train"]
         test = experiment["eval"]
         train_vals, f1_micro, f1_macro, accs, besov_layers = [], [], [], [], []
-        # besov = []
         indices = []
         for tr, te in zip(train, test):
             test_accs = [t["accuracy"] for t in te]
             i = np.argpartition(test_accs, -1)[-1]
-            # i = np.argmax(test_accs)
             indices.append(i)
             train_vals.append(tr[i]["loss"])
             f1_micro.append(te[i]["f1_micro"])
             f1_macro.append(te[i]["f1_macro"])
             accs.append(te[i]["accuracy"])
-            besov_layers.append(te[i]["repr"]["alpha"])
 
-        besov_weighted = [
-            np.mean(un["alpha"] * np.flip(np.arange(len(un["alpha"]))))
-            for un in experiment["untrained"]
-        ]
-        besov_mean = [np.mean(un["alpha"]) for un in experiment["untrained"]]
         labeled_vals = experiment["labeled"]
         iter_vals = list(range(len(labeled_vals)))
 
-
-        if len(besov_mean) < len(iter_vals):
-            besov_mean.append(np.nan)
-            besov_weighted.append(np.nan)
-
-        # besov_scores = []
-        # for i in range(len(labeled_vals)):
-        #     x = labeled_vals[: i + 1]
-        #     y = besov[: i + 1]
-        #     besov_scores.append(np.var(y))
-        # reg = LinearRegression()
-        # reg.fit(np.log(x).reshape(-1, 1), np.log(y))
-        # score = reg.coef_[0]
-        # besov_scores.append(score)
 
         df_tr = pd.DataFrame(
             {
@@ -332,14 +217,9 @@ def extract_best_epoch(exp_set):
                 "test_accuracy": accs,
                 "f1_micro": f1_micro,
                 "f1_macro": f1_macro,
-                "besov_weighted": besov_weighted,
-                "besov_mean": besov_mean,
-                "besov_layers": besov_layers,
-                # "besov_diff": besov_diff,
             }
         )
 
-        df_tr["besov_normalized"] = df_tr.besov_layers.apply(softmax)
         df_tr["experiment"] = exp_index
         df_tr.set_index(["experiment", "al_iter"], inplace=True)
 
@@ -365,7 +245,6 @@ def plot_al_accuracy(data, metric="f1_micro", figsize=(12, 8), ci=90):
 
 def plot_besov_index(data, figsize=(12, 8), ci=90):
     plt.figure(figsize=figsize)
-    # data["besov"] = data.besov_index.apply(lambda x: np.mean(x[-1]))
     sns.lineplot(
         data=data,
         x="labeled",
@@ -394,9 +273,6 @@ def plot_experiment_set(df_tr, meta, sampler, figsize=(12, 16), ci=90):
 def scatter_it(df, meta, hue_metric="correct", show_hist=True):
     # Subsample data to plot, so the plot is not too busy.
     dataframe = df
-    #     dataframe.sample(
-    #         n=25000 if dataframe.shape[0] > 25000 else len(dataframe)
-    #     )
 
     if hue_metric == "correct":
         # Normalize correctness to a value between 0 and 1.
