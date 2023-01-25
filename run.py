@@ -66,10 +66,6 @@ if __name__ == "__main__":
             "batch_size": args.batch_size,
             "epochs_per_train": args.epochs,
             "seeds": seeds,
-            "prop_easy": args.prop_easy,
-            "prop_amb": args.prop_amb,
-            "prop_hard": args.prop_hard,
-            "pvi_threshold": args.pvi_threshold,
             "lr": args.lr,
             "l2": args.l2,
         }
@@ -137,5 +133,7 @@ if __name__ == "__main__":
             f"{args.data}-{args.model}-{args.adapter}-{sampler.name}-"
             f"lm={args.pretrain}-e={args.epochs}-{start_time}.pkl"
         )
+        meta_info["time"] = (datetime.now().strftime(fmt) - start_time).total_seconds()
+
         with open(f"{args.save_dir}/{fname}", "wb") as f:
             pickle.dump((result_list, meta_info), f)

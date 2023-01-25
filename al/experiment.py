@@ -1,12 +1,8 @@
-from re import L
-from sched import scheduler
 import numpy as np
-import pandas as pd
 import logging
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import f1_score
 import torch
 import time
-from scipy.special import softmax
 
 import torch.nn.functional as F
 from models import initialize_language_model
@@ -20,7 +16,6 @@ from podium import Iterator
 
 import math
 import wandb
-
 
 
 class Experiment:
@@ -168,7 +163,6 @@ class Experiment:
             )
             train_results = []
             eval_results = []
-            besov = []
             acc = []
             loss = []
 
@@ -193,9 +187,7 @@ class Experiment:
                 if break_:
                     break
 
-
             wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
-
 
             # 2) Retrieve active sample.
             if not lab_mask.all():
@@ -221,16 +213,12 @@ class Experiment:
                 lab_mask[selected_inds] = True
                 results["selected"].append(selected_inds)
                 logging.info(f"{len(selected_inds)} data points selected.")
-                # untrained_sample_repr = self._representation_stats(model, selected_inds)
-                # results["untrained"].append(untrained_sample_repr)
 
             # 3) Store results.
             results["train"].append(train_results)
             results["eval"].append(eval_results)
 
         return results
-
-   
 
     def _representation_stats(self, model, indices):
 
@@ -390,7 +378,6 @@ class Experiment:
 
         return lm
 
-    
     def unbiased_loop(
         self, create_model_fn, criterion, warm_start_size, query_size, mode, tokenizer
     ):
@@ -534,7 +521,6 @@ class Experiment:
 
         return results
 
-   
     def _pure(self, model, optimizer, criterion, train_iter, lab_inds, weights):
         model.train()
 
@@ -665,7 +651,6 @@ class Experiment:
         logit_tensor = torch.cat(logit_list)
         y_true = torch.cat(y_true_list)
         return result_dict, logit_tensor, y_true
-
 
     def _train_model(self, model, optimizer, criterion, train_iter):
         model.train()
@@ -953,7 +938,6 @@ class Experiment:
         inds = np.argsort([self.id2ind[id] for id in ids])
 
         return is_correct[inds], true_probs[inds]
-
 
     def _compute_cartography(self, trends):
         cartography_results = {}

@@ -19,6 +19,7 @@ from transformers import (
 from transformers.adapters import (
     PfeifferConfig,
     HoulsbyConfig,
+    CompacterConfig,
     PrefixTuningConfig,
     LoRAConfig,
     IA3Config,
@@ -48,7 +49,6 @@ class AcquisitionModel:
         pass
 
 
-
 class Transformer(nn.Module, AcquisitionModel):
     def __init__(self, config, meta, name, pretrained=None, adapter=False):
         super().__init__()
@@ -61,16 +61,13 @@ class Transformer(nn.Module, AcquisitionModel):
             name = TRANSFORMERS[name]
 
         if adapter:
-            self.classifier = AutoAdapterModel.from_pretrained(
-                name
-            )
+            self.classifier = AutoAdapterModel.from_pretrained(name)
             task_name = config.data
-            self.classifier.add_classification_head(task_name, num_labels=meta.num_targets)
-            adapter_config = ADAPTER_CONFIGS[adapter]()
-            self.classifier.add_adapter(
-                task_name,
-                config=adapter_config
+            self.classifier.add_classification_head(
+                task_name, num_labels=meta.num_targets
             )
+            adapter_config = ADAPTER_CONFIGS[adapter]()
+            self.classifier.add_adapter(task_name, config=adapter_config)
             # Enable adapter training
             self.classifier.train_adapter(task_name)
         else:
@@ -127,7 +124,9 @@ def initialize_model(args, meta, pretrained=None):
             meta.embeddings = torch.tensor(load_embeddings(meta.vocab, name="glove"))
 
     model_cls = models[args.model]
-    model = model_cls(config=args, meta=meta, pretrained=pretrained, adapter=args.adapter)
+    model = model_cls(
+        config=args, meta=meta, pretrained=pretrained, adapter=args.adapter
+    )
 
     return model
 
@@ -253,8 +252,8 @@ pair_sequence_models = {
     ),
     "DistilBERT": partial(PairSequenceClassifier, name="distilbert-base-uncased"),
     "RoBERTa": partial(PairSequenceClassifier, name="roberta-base"),
-}    
-    
+}
+
 
 ADAPTER_CONFIGS = {
     "pfeiffer": PfeifferConfig,
@@ -262,5 +261,7 @@ ADAPTER_CONFIGS = {
     "prefix": PrefixTuningConfig,
     "lora": LoRAConfig,
     "ia3": IA3Config,
-    "unipelt": UniPELTConfig, 
+    "mam": MAMConfig,
+    "compacter": CompacterConfig,
+    "unipelt": UniPELTConfig,
 }
