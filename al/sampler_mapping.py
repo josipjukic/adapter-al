@@ -1,5 +1,4 @@
 from al.albi import ActiveLearningBesovIndex
-from al.bald.batch_bald import BatchBALDDropout
 from al.discriminative import DiscriminativeRepresentationSampling
 from al.kmeans import AntiKMeansSampler, KMeansSampler
 from al.representation import (
@@ -11,7 +10,6 @@ from al.representation import (
 from al.sampler import RandomSampler
 from al.uncertainty import (
     AntiEntropySampler,
-    AntiEntropySklearn,
     AntiMarginSampler,
     EntropyDropoutSampler,
     EntropySampler,
@@ -20,8 +18,6 @@ from al.uncertainty import (
     MarginDropoutSampler,
     MarginSampler,
     MostConfidentSampler,
-    EntropySklearn,
-    MarginSklearn,
 )
 from al.core_set import CoreSet
 from al.badge import BADGE, AntiBADGE
@@ -38,14 +34,10 @@ AL_SAMPLERS = {
     EntropyDropoutSampler.name: EntropyDropoutSampler,
     BADGE.name: BADGE,
     CoreSet.name: CoreSet,
-    BatchBALDDropout.name: BatchBALDDropout,
     MostConfidentSampler.name: MostConfidentSampler,
     AntiMarginSampler.name: AntiMarginSampler,
     AntiEntropySampler.name: AntiEntropySampler,
     AntiKMeansSampler.name: AntiKMeansSampler,
-    EntropySklearn.name: EntropySklearn,
-    MarginSklearn.name: MarginSklearn,
-    AntiEntropySklearn.name: AntiEntropySklearn,
     DiscriminativeRepresentationSampling.name: DiscriminativeRepresentationSampling,
     AntiBADGE.name: AntiBADGE,
     Representation.name: Representation,

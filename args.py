@@ -1,27 +1,23 @@
 from dataloaders import *
 
 import argparse
-import os
 
 import transformers
+
 
 transformers.logging.set_verbosity_error()
 
 
-word_vector_files = {"glove": os.path.expanduser("~/data/vectors/glove.840B.300d.txt")}
-
-
 dataset_loaders = {
     "IMDB": load_imdb,
-    "IMB": load_imb,
     "POL": load_polarity,
-    "TREC": load_trec,
+    "TREC-2": load_trec2,
+    "TREC-6": load_trec6,
     "COLA": load_cola,
     "SUBJ": load_subj,
     "SST": load_sst,
-    "ag_news": load_ag_news,
-    "ag_news-full": load_ag_news_full,
-    "TREC-full": load_trec_full,
+    "AGN-2": load_agn2,
+    "AGN-4": load_agn4,
     "ISEAR": load_isear,
 }
 
@@ -38,51 +34,17 @@ def make_parser():
     parser.add_argument(
         "--data",
         type=str,
-        default="IMDB",
-        help="Data corpus: [IMDB, TREC, COLA]",
+        default="TREC-2",
+        help="Data corpus.",
     )
     parser.add_argument(
         "--model",
         type=str,
         default="ELECTRA",
-        help="Model: [JWA, MLP, ALBERT, BERT, ELECTRA, RoBERTa, DistilBERT, LR]",
+        help="Model: [ALBERT, BERT, ELECTRA, RoBERTa, DistilBERT]",
     )
 
-    # JWA arguments
-    parser.add_argument(
-        "--rnn_type",
-        type=str,
-        default="LSTM",
-        help="type of recurrent net [LSTM, GRU, MHA]",
-    )
-    parser.add_argument(
-        "--attention_type",
-        type=str,
-        default="nqadd",
-        help="attention type [dot, add, nqdot, nqadd], default = nqadd",
-    )
-    parser.add_argument(
-        "--embedding-dim",
-        type=int,
-        default=300,
-        help="size of word embeddings [Uses pretrained on 300]",
-    )
-    parser.add_argument(
-        "--hidden-dim",
-        type=int,
-        default=150,
-        help="number of hidden units for the encoder",
-    )
-    parser.add_argument(
-        "--num-layers", type=int, default=1, help="number of layers of the encoder"
-    )
     parser.add_argument("--lr", type=float, default=2e-5, help="initial learning rate")
-    parser.add_argument(
-        "--vectors",
-        type=str,
-        default="glove",
-        help="Pretrained vectors to use [glove, fasttext]",
-    )
     parser.add_argument("--clip", type=float, default=1.0, help="gradient clipping")
     parser.add_argument("--epochs", type=int, default=5, help="upper epoch limit")
     parser.add_argument(
@@ -197,65 +159,6 @@ def make_parser():
         help="Unbiased estimator: [PURE, LURE]. If 'none', then ignored.",
     )
 
-    # Category arguments
-    # ====================================
-
-    # Category dataframe
-    parser.add_argument("--category-df", type=str, help="Category data frame path.")
-
-    # Load cartography
-    parser.add_argument(
-        "--load-cartography",
-        type=str,
-        help="Path to cartography data frame.",
-    )
-
-    # Easy proportion
-    parser.add_argument(
-        "--prop-easy",
-        type=float,
-        default=1.0,
-        help="Proportion of easy examples for training in interval [0,1]."
-        " E.g., 0.5 means that 50% of easy examples will be used for training.",
-    )
-
-    # Ambiguous proportion
-    parser.add_argument(
-        "--prop-amb",
-        type=float,
-        default=1.0,
-        help="Proportion of ambiguous examples for training in interval [0,1]."
-        " E.g., 0.5 means that 50% of ambiguous examples will be used for training.",
-    )
-
-    # Hard proportion
-    parser.add_argument(
-        "--prop-hard",
-        type=float,
-        default=1.0,
-        help="Proportion of hard examples for training in interval [0,1]."
-        " E.g., 0.5 means that 50% of hard examples will be used for training.",
-    )
-
-    # Load PVI
-    parser.add_argument(
-        "--load-pvi",
-        type=str,
-        help="Path to cartography data frame.",
-    )
-
-    parser.add_argument(
-        "--pvi-threshold",
-        type=float,
-        help="PVI threshold. All of the examples below the threshold will be ignored.",
-    )
-
-    parser.add_argument(
-        "--ex-loss",
-        type=bool,
-        default=False,
-        help="Calculate expected loss.",
-    )
 
     parser.add_argument(
         "--repr-stats",
@@ -286,13 +189,6 @@ def make_parser():
     )
 
     parser.add_argument(
-        "--loss",
-        type=bool,
-        default=False,
-        help="Use lowest loss.",
-    )
-
-    parser.add_argument(
         "--stratified",
         type=bool,
         default=False,
@@ -309,8 +205,8 @@ def make_parser():
 
     parser.add_argument(
         "--adapter",
-        type=bool,
-        default=False,
+        type=str,
+        default="pfeiffer",
         help="Adapter.",
     )
 

@@ -1,7 +1,4 @@
-from distutils.log import Log
 from pyrsistent import b
-import torch
-import gc
 import numpy as np
 from sklearn.linear_model import LogisticRegression as LR
 

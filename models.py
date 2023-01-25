@@ -1,6 +1,4 @@
 from abc import abstractmethod
-from ast import Tuple
-from ctypes import Union
 from functools import partial
 from typing import Optional
 from dataloaders import load_embeddings
@@ -16,8 +14,16 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForMaskedLM,
     AutoAdapterModel,
-    AdapterConfig,
-    PreTrainedModel,
+)
+
+from transformers.adapters import (
+    PfeifferConfig,
+    HoulsbyConfig,
+    PrefixTuningConfig,
+    LoRAConfig,
+    IA3Config,
+    MAMConfig,
+    UniPELTConfig,
 )
 
 from sklearn.linear_model import LogisticRegression as LR
@@ -60,12 +66,13 @@ class Transformer(nn.Module, AcquisitionModel):
             )
             task_name = config.data
             self.classifier.add_classification_head(task_name, num_labels=meta.num_targets)
+            adapter_config = ADAPTER_CONFIGS[adapter]()
             self.classifier.add_adapter(
-                task_name
+                task_name,
+                config=adapter_config
             )
             # Enable adapter training
             self.classifier.train_adapter(task_name)
-            print("ACTIVE HEAD", self.classifier.active_head)
         else:
             self.classifier = AutoModelForSequenceClassification.from_pretrained(
                 name, num_labels=meta.num_targets
@@ -246,4 +253,14 @@ pair_sequence_models = {
     ),
     "DistilBERT": partial(PairSequenceClassifier, name="distilbert-base-uncased"),
     "RoBERTa": partial(PairSequenceClassifier, name="roberta-base"),
+}    
+    
+
+ADAPTER_CONFIGS = {
+    "pfeiffer": PfeifferConfig,
+    "houlsby": HoulsbyConfig,
+    "prefix": PrefixTuningConfig,
+    "lora": LoRAConfig,
+    "ia3": IA3Config,
+    "unipelt": UniPELTConfig, 
 }

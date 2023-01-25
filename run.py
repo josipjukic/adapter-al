@@ -134,7 +134,7 @@ if __name__ == "__main__":
 
         wandb.config = meta_info
         fname = (
-            f"{args.data}-{args.model}-{sampler.name}-{args.unbiased}-"
+            f"{args.data}-{args.model}-{args.adapter}-{sampler.name}-"
             f"lm={args.pretrain}-e={args.epochs}-{start_time}.pkl"
         )
         with open(f"{args.save_dir}/{fname}", "wb") as f:

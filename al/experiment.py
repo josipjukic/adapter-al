@@ -21,7 +21,6 @@ from podium import Iterator
 import math
 import wandb
 
-from datetime import datetime
 
 
 class Experiment:
@@ -29,46 +28,6 @@ class Experiment:
         self.sampler = sampler
         self.args = args
         mask = np.full(len(train_set), True)
-        if self.args.load_cartography:
-            crt_train = pd.read_csv(
-                os.path.join(self.args.load_cartography, f"{self.args.model}.csv"),
-                index_col=0,
-            )
-
-            # TODO: make generic (independent of number of epochs)
-            easy_inds = crt_train[crt_train.correctness == 5]
-            amb_inds = crt_train[
-                (crt_train.correctness == 2) | (crt_train.correctness == 3)
-            ]
-            hard_inds = crt_train[
-                crt_train.correctness
-                < 4
-                # (crt_train.correctness == 0) | (crt_train.correctness == 1)
-            ]
-
-            # Category proportions
-            if self.args.prop_easy < 1.0 and self.args.prop_easy >= 0.0:
-                easy_remove = easy_inds.sample(frac=1.0 - self.args.prop_easy)
-                mask[easy_remove.index] = False
-
-            if self.args.prop_amb < 1.0 and self.args.prop_amb >= 0.0:
-                amb_remove = amb_inds.sample(frac=1.0 - self.args.prop_amb)
-                mask[amb_remove.index] = False
-
-            if self.args.prop_hard < 1.0 and self.args.prop_hard >= 0.0:
-                hard_remove = hard_inds.sample(frac=1.0 - self.args.prop_hard)
-                mask[hard_remove.index] = False
-
-        if self.args.load_pvi:
-            pvi_train = pd.read_csv(
-                os.path.join(self.args.load_pvi, f"pvi_{self.args.model}.csv"),
-                index_col=0,
-            )
-
-            # Category proportions
-            if self.args.pvi_threshold is not None:
-                pvi_remove = pvi_train[pvi_train.pvi < self.args.pvi_threshold]
-                mask[pvi_remove.index] = False
 
         indices, *_ = np.where(mask)
         self.train_set = train_set[indices]
@@ -121,20 +80,6 @@ class Experiment:
 
         selected_examples = []
         selected_inds = None
-
-        # if self.args.load_cartography:
-        #     crt_train = pd.read_csv(
-        #         os.path.join(self.args.load_cartography, f"{self.args.model}.csv"),
-        #         index_col=0,
-        #     )
-        #     hard_inds = crt_train[
-        #         (crt_train.correctness == 0) | (crt_train.correctness == 1)
-        #     ]
-        #     if self.args.prop_hard < 1.0 and self.args.prop_hard >= 0.0:
-        #         hard_remove = hard_inds.sample(frac=1.0 - self.args.prop_hard)
-        #         mask = np.full(len(self.train_set), True)
-        #         mask[hard_remove.index] = False
-        #         self.train_set = self.train_set[mask]
 
         # Initialize label mask.
         lab_mask = np.full(len(self.train_set), False)
@@ -241,13 +186,6 @@ class Experiment:
 
                 # b) Evaluate model (test set)
                 eval_result_dict = self._evaluate_model(model)
-                # repr_stats = self._representation_stats(model, indices)
-                # if selected_inds is not None:
-                #     sample_repr = self._representation_stats(model, selected_inds)
-                #     eval_result_dict["sample_repr"] = sample_repr
-
-                # eval_result_dict["repr"] = repr_stats
-                # besov.append(np.mean(repr_stats["alpha"]))
                 acc.append(eval_result_dict["accuracy"])
                 loss.append(result_dict_train["loss"])
                 eval_results.append(eval_result_dict)
@@ -255,60 +193,9 @@ class Experiment:
                 if break_:
                     break
 
-                # if self.args.besov and epoch > 5:
-                #     besov_layers = softmax(repr_stats["alpha"])
-                #     besov_middle_layers = besov_layers[4:8]
-                #     besov_last_layers = besov_layers[8:]
-
-                #     middle_mass = besov_middle_layers.sum()
-                #     end_mass = besov_last_layers.sum()
-                #     if middle_mass > end_mass:
-                #         break_ = True
 
             wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
 
-            # if self.args.besov:
-            #     num_epochs = max(5, np.argmax(besov) + 1)
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Besov-optimal epoch]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.best:
-            #     num_epochs = np.argmax(acc) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Best epoch strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
-            # elif self.args.loss:
-            #     num_epochs = np.argmin(loss) + 1
-
-            #     model = create_model_fn(self.args, self.meta)
-            #     model.to(self.device)
-            #     for epoch in range(1, num_epochs + 1):
-            #         result_dict_train, logits, y_true, ids = self._train_model(
-            #             model, optimizer, criterion, train_iter
-            #         )
-            #         print(
-            #             f"[Loss strategy]: {epoch}/{num_epochs}",
-            #             end="\r",
-            #             flush=True,
-            #         )
 
             # 2) Retrieve active sample.
             if not lab_mask.all():
@@ -1067,34 +954,6 @@ class Experiment:
 
         return is_correct[inds], true_probs[inds]
 
-    def _cartography_epoch_test(self, model, ids):
-        model.train()
-
-        data = self.test_iter
-
-        logit_list = []
-        y_true_list = []
-        with torch.inference_mode():
-            for batch_num, batch in enumerate(data):
-                # Unpack batch & cast to device
-                (x, lengths), y = batch.text, batch.label
-
-                y = y.squeeze()  # y needs to be a 1D tensor for xent(batch_size)
-                y_true_list.append(y.cpu())
-
-                logits, _ = model(x, lengths)
-                logit_list.append(logits.cpu())
-
-        logit_tensor = torch.cat(logit_list)
-        y_true = torch.cat(y_true_list)
-        probs = logits_to_probs(logit_tensor)
-        true_probs = probs.gather(dim=1, index=y_true.unsqueeze(dim=1)).squeeze()
-        y_pred = torch.argmax(probs, dim=1)
-        is_correct = y_pred == y_true
-
-        inds = np.argsort([self.id2ind[id] for id in ids])
-
-        return is_correct[inds], true_probs[inds]
 
     def _compute_cartography(self, trends):
         cartography_results = {}

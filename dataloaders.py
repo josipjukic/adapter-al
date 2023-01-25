@@ -3,7 +3,7 @@ import torch
 
 import numpy as np
 from podium import Vocab, Field, LabelField, Iterator  # , BucketIterator
-from podium.datasets import TabularDataset, Dataset, ExampleFactory
+from podium.datasets import TabularDataset
 from podium.datasets.hf import HFDatasetConverter
 from podium.vectorizers import GloVe
 from podium.utils.general_utils import repr_type_and_attrs
@@ -12,8 +12,7 @@ from typing import Iterator as PythonIterator
 from typing import NamedTuple, Tuple
 
 
-from transformers import AutoTokenizer, BertTokenizer
-from datasets import load_dataset
+from transformers import AutoTokenizer
 
 from util import Config
 
@@ -157,7 +156,6 @@ def load_embeddings(vocab, name="glove"):
         return embeddings
     else:
         raise ValueError(f"Wrong embedding key provided {name}")
-        # return None
 
 
 def make_iterable(dataset, device, batch_size=32, train=False, indices=None):
@@ -311,7 +309,7 @@ def load_isear(
     )
 
 
-def load_ag_news(
+def load_agn2(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
@@ -319,7 +317,7 @@ def load_ag_news(
 ):
 
     return load_dataset(
-        "data/ag_news",
+        "data/AGN-2",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
@@ -327,7 +325,7 @@ def load_ag_news(
     )
 
 
-def load_ag_news_full(
+def load_agn4(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
@@ -335,7 +333,7 @@ def load_ag_news_full(
 ):
 
     return load_dataset(
-        "data/ag_news-full",
+        "data/AGN-4",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
@@ -343,79 +341,7 @@ def load_ag_news_full(
     )
 
 
-def load_imb(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
 
-    return load_dataset(
-        "data/IMB",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_imdb_sentences(
-    tokenizer=None,
-    train_path="data/IMDB_sentences/IMDB_nlptown_bert_train.csv",
-    test_path="data/IMDB_sentences/IMDB_nlptown_bert_test.csv",
-    max_vocab_size=20000,
-    max_len=100,
-    clip=True,
-):
-
-    post_hooks = []
-    if max_len:
-        post_hooks.append(MaxLenHook(max_len))
-
-    if tokenizer is None:
-        vocab = Vocab(max_size=max_vocab_size)
-        fields = [
-            Field("id"),
-            Field(
-                "text",
-                numericalizer=vocab,
-                include_lengths=True,
-                posttokenize_hooks=post_hooks,
-                keep_raw=True,
-            ),
-            LabelField("label"),
-        ]
-    else:
-        # Use BERT subword tokenization
-        vocab = None
-        pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-        fields = [
-            Field("id"),
-            Field(
-                "text",
-                tokenizer=tokenizer.tokenize,
-                padding_token=pad_index,
-                numericalizer=tokenizer.convert_tokens_to_ids,
-                include_lengths=True,
-                posttokenize_hooks=post_hooks,
-                keep_raw=True,
-            ),
-            LabelField("label"),
-        ]
-
-    train_dataset, valid_dataset = TabularDataset(
-        train_path, format="csv", fields=fields
-    ).split(split_ratio=0.7, random_state=42)
-    test_dataset = TabularDataset(test_path, format="csv", fields=fields)
-    test_dataset.shuffle_examples(random_state=42)
-
-    train_dataset.finalize_fields()
-    test_dataset = test_dataset[:10_000] if clip else test_dataset
-    return (
-        train_dataset[:50_000],
-        valid_dataset[:10_000],
-        test_dataset,
-    ), vocab
 
 
 def test_load_cola(meta, tok):
@@ -437,50 +363,6 @@ def test_load_cola(meta, tok):
     print(vocab.get_padding_index())
 
 
-def test_load_imdb_sentences():
-    splits, vocab = load_imdb_sentences()
-    print(vocab)
-    train, valid, test = splits
-    print(len(train), len(valid), len(test))
-
-    print(train)
-
-    device = torch.device("cpu")
-    train_iter = make_iterable(test, device, batch_size=16)
-    batch = next(iter(train_iter))
-
-    print(batch)
-    text, length = batch.text
-    for i in range(len(text)):
-        print(vocab.reverse_numericalize(text[i]))
-        print(length[i])
-
-
-def test_load_imdb_rationale(conflate=True):
-    if not conflate:
-        dataset_splits = eraser_reader("data/movies", conflate=conflate)
-        instances, _, _ = dataset_splits[0]
-    else:
-        instances = eraser_reader("data/movies", conflate=conflate)
-    print(len(instances))
-    print(instances[0])
-    print(instances[0].extras["rationale_mask"])
-
-
-def test_load_tse_rationale():
-    (tse_train, tse_test), vocab = load_tse()
-    print(tse_train[0])
-
-    device = torch.device("cpu")
-    train_iter = make_iterable(tse_train, device, batch_size=2)
-    batch = next(iter(train_iter))
-
-    print(batch)
-    text, length = batch.text
-
-    print(vocab.reverse_numericalize(text[0]))
-    print(length[0])
-    print(vocab.get_padding_index())
 
 
 def load_dataset(
@@ -579,7 +461,8 @@ def test_load_sst(max_vocab_size=20_000, max_seq_len=200):
     print(vocab.get_padding_index())
 
 
-def load_jwa_sst(
+
+def load_trec2(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
@@ -587,7 +470,7 @@ def load_jwa_sst(
 ):
 
     return load_dataset(
-        "data/JWA-SST",
+        "data/TREC-2",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
@@ -595,7 +478,7 @@ def load_jwa_sst(
     )
 
 
-def load_trec(
+def load_trec6(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
@@ -603,23 +486,7 @@ def load_trec(
 ):
 
     return load_dataset(
-        "data/TREC",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_trec_full(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/TREC-full",
+        "data/TREC-6",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
@@ -706,25 +573,6 @@ def load_trec_hf(label="label-coarse", max_vocab_size=20_000, max_seq_len=200):
     return (train, val, test), vocab
 
 
-def test_load_trec():
-    splits, vocab = load_trec()
-    print(vocab)
-    train, valid, test = splits
-    print(len(train), len(valid), len(test))
-
-    print(train)
-    print(train[0])
-
-    device = torch.device("cpu")
-    train_iter = make_iterable(train, device, batch_size=2)
-    batch = next(iter(train_iter))
-
-    print(batch)
-    text, length = batch.text
-    print(vocab.reverse_numericalize(text[0]))
-    print(length[0])
-    print(vocab.get_padding_index())
-
 
 def add_ids_to_files(root_folder):
     split_ins = ["train_old.csv", "dev_old.csv", "test_old.csv"]
@@ -739,20 +587,6 @@ def add_ids_to_files(root_folder):
                         continue
                     outfile.write(f"{idx-1},{parts[0]},{parts[1]}\n")
 
-
-def make_sklearn_dataset(dataset, vectorizer, indices=None):
-    """
-    Construct a DataLoader from a podium Dataset
-    """
-
-    # Selects examples at given indices to support subset iteration.
-    if indices is not None:
-        dataset = dataset[indices]
-
-    _, X, y = dataset.batch(add_padding=True)
-    X_trans = vectorizer.transform(X[0])
-
-    return X_trans, np.array(y)
 
 
 if __name__ == "__main__":
