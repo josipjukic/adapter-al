@@ -1,7 +1,5 @@
 from abc import abstractmethod
 from functools import partial
-from typing import Optional
-from dataloaders import load_embeddings
 
 from collections import namedtuple
 
@@ -25,9 +23,8 @@ from transformers.adapters import (
     IA3Config,
     MAMConfig,
     UniPELTConfig,
+    ParallelConfig,
 )
-
-from sklearn.linear_model import LogisticRegression as LR
 
 
 SequenceClassifierOutput = namedtuple(
@@ -59,7 +56,6 @@ class Transformer(nn.Module, AcquisitionModel):
             name = f"pretrained/{config.model}-{config.data}"
         else:
             name = TRANSFORMERS[name]
-            
 
         if adapter:
             self.classifier = AutoAdapterModel.from_pretrained(name)
@@ -123,15 +119,10 @@ class Transformer(nn.Module, AcquisitionModel):
 
 
 def initialize_model(args, meta, pretrained=None):
-    if args.model == "LR":
-        return models[args.model]()
-
-    if args.model not in TRANSFORMERS.keys():
-        if not hasattr(meta, "embeddings"):
-            # Cache embeddings
-            meta.embeddings = torch.tensor(load_embeddings(meta.vocab, name="glove"))
-
-    model_cls = models[args.model]
+    if meta.pair_sequence:
+        model_cls = pair_sequence_models[args.model]
+    else:
+        model_cls = models[args.model]
     model = model_cls(
         config=args, meta=meta, pretrained=pretrained, adapter=args.adapter
     )
@@ -140,7 +131,7 @@ def initialize_model(args, meta, pretrained=None):
 
 
 class PairSequenceClassifier(nn.Module, AcquisitionModel):
-    def __init__(self, config, meta, name):
+    def __init__(self, config, meta, name, pretrained=None, adapter=False):
         super().__init__()
         # add config.share_encoders
 
@@ -275,6 +266,7 @@ ADAPTER_CONFIGS = {
     "pfeiffer": PfeifferConfig,
     "houlsby": HoulsbyConfig,
     "prefix": PrefixTuningConfig,
+    "parallel": ParallelConfig,
     "lora": LoRAConfig,
     "ia3": IA3Config,
     "mam": MAMConfig,

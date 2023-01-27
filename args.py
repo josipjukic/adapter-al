@@ -19,10 +19,16 @@ dataset_loaders = {
     "AGN-2": load_agn2,
     "AGN-4": load_agn4,
     "ISEAR": load_isear,
+    "MNLI": load_mnli,
+    "MRPC": load_mrpc,
 }
 
 pair_sequence_datasets = {
-    "SNLI",
+    "MNLI",
+    "QNLI",
+    "MRPC",
+    "QQP",
+    "RTE",
 }
 
 
@@ -40,13 +46,13 @@ def make_parser():
     parser.add_argument(
         "--model",
         type=str,
-        default="ELECTRA",
+        default="BERT",
         help="Model: [ALBERT, BERT, ELECTRA, RoBERTa, DistilBERT]",
     )
 
     parser.add_argument("--lr", type=float, default=2e-5, help="initial learning rate")
     parser.add_argument("--clip", type=float, default=1.0, help="gradient clipping")
-    parser.add_argument("--epochs", type=int, default=5, help="upper epoch limit")
+    parser.add_argument("--epochs", type=int, default=20, help="upper epoch limit")
     parser.add_argument(
         "--batch-size", type=int, default=32, metavar="N", help="batch size"
     )
@@ -54,7 +60,6 @@ def make_parser():
     parser.add_argument(
         "--l2", type=float, default=1e-5, help="l2 regularization (weight decay)"
     )
-    parser.add_argument("--bi", action="store_true", help="[USE] bidirectional encoder")
     parser.add_argument("--freeze", action="store_true", help="Freeze embeddings")
 
     # Vocab specific arguments
@@ -105,34 +110,15 @@ def make_parser():
     parser.add_argument(
         "--al-samplers",
         nargs="+",
-        default=["random", "entropy"],
+        default=["random", "entropy", "entropy_dropout", "dal", "core_set"],
         choices=[
             "random",
-            "least_confident",
-            "margin",
             "entropy",
             "kmeans",
-            "least_confident_dropout",
-            "margin_dropout",
             "entropy_dropout",
-            "badge",
             "core_set",
-            "batch_bald",
-            "most_confident",
-            "anti_margin",
-            "anti_entropy",
-            "anti_kmeans",
-            "anti_badge",
-            "anti_core_set",
-            "entropy_sklearn",
-            "margin_sklearn",
-            "anti_entropy_sklearn",
             "dal",
-            "repr",
-            "anti_repr",
-            "mean_repr",
-            "anti_mean_repr",
-            "albi",
+            "anti_entropy",
         ],
         help="Specify a list of active learning samplers.",
     )
@@ -149,7 +135,7 @@ def make_parser():
         "--warm-start-size", type=int, default=50, help="Initial AL batch size."
     )
     parser.add_argument(
-        "--max-train-size", type=int, default=3000, help="Maximum train set size."
+        "--max-train-size", type=int, default=1000, help="Maximum train set size."
     )
 
     parser.add_argument(
@@ -158,7 +144,6 @@ def make_parser():
         default="none",
         help="Unbiased estimator: [PURE, LURE]. If 'none', then ignored.",
     )
-
 
     parser.add_argument(
         "--repr-stats",
@@ -202,11 +187,14 @@ def make_parser():
         help="Use linear decay scheduler.",
     )
 
-
     parser.add_argument(
         "--adapter",
         type=str,
         help="Adapter.",
+    )
+
+    parser.add_argument(
+        "--share-encoders", type=bool, default=True, help="Share encoders."
     )
 
     return parser.parse_args()

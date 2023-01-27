@@ -341,7 +341,34 @@ def load_agn4(
     )
 
 
+def load_mnli(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_sequence_pair_dataset(
+        "data/GLUE/MNLI",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
 
+
+def load_mrpc(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_sequence_pair_dataset(
+        "data/GLUE/MRPC",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
 
 
 def test_load_cola(meta, tok):
@@ -363,48 +390,87 @@ def test_load_cola(meta, tok):
     print(vocab.get_padding_index())
 
 
+def load_sequence_pair_dataset(
+    data_dir, meta, tokenizer=None, max_vocab_size=20_000, max_seq_len=200
+):
+
+    # Use BERT subword tokenization
+    vocab = TokenizerVocabWrapper(tokenizer)
+    print(vocab.get_padding_index())
+    pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    fields = [
+        Field("id", disable_batch_matrix=True),
+        Field(
+            "sequence1",
+            tokenizer=tokenizer.tokenize,
+            padding_token=pad_index,
+            numericalizer=tokenizer.convert_tokens_to_ids,
+            include_lengths=True,
+            posttokenize_hooks=[
+                remove_nonalnum,
+                MaxLenHook(max_seq_len),
+                lowercase_hook,
+            ],
+        ),
+        Field(
+            "sequence2",
+            tokenizer=tokenizer.tokenize,
+            padding_token=pad_index,
+            numericalizer=tokenizer.convert_tokens_to_ids,
+            include_lengths=True,
+            posttokenize_hooks=[
+                remove_nonalnum,
+                MaxLenHook(max_seq_len),
+                lowercase_hook,
+            ],
+        ),
+        LabelField("label"),
+    ]
+
+    train = TabularDataset(
+        os.path.join(data_dir, "train.csv"), format="csv", fields=fields
+    )
+    val = TabularDataset(
+        os.path.join(data_dir, "validation.csv"), format="csv", fields=fields
+    )
+    test = TabularDataset(
+        os.path.join(data_dir, "test.csv"), format="csv", fields=fields
+    )
+
+    train.finalize_fields()
+
+    meta.vocab = vocab
+    meta.num_tokens = len(vocab)
+    meta.padding_idx = vocab.get_padding_index()
+    meta.num_labels = len(train.field("label").vocab)
+
+    return (train, val, test), vocab
 
 
 def load_dataset(
     data_dir, meta, tokenizer=None, max_vocab_size=20_000, max_seq_len=200
 ):
-    if tokenizer is None:
-        vocab = Vocab(max_size=max_vocab_size)
-        fields = [
-            Field("id", disable_batch_matrix=True),
-            Field(
-                "text",
-                numericalizer=vocab,
-                include_lengths=True,
-                posttokenize_hooks=[
-                    remove_nonalnum,
-                    MaxLenHook(max_seq_len),
-                    lowercase_hook,
-                ],
-            ),
-            LabelField("label"),
-        ]
-    else:
-        # Use BERT subword tokenization
-        vocab = TokenizerVocabWrapper(tokenizer)
-        print(vocab.get_padding_index())
-        pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
-        fields = [
-            Field("id", disable_batch_matrix=True),
-            Field(
-                "text",
-                tokenizer=tokenizer.tokenize,
-                padding_token=pad_index,
-                numericalizer=tokenizer.convert_tokens_to_ids,
-                include_lengths=True,
-                posttokenize_hooks=[
-                    remove_nonalnum,
-                    MaxLenHook(max_seq_len),
-                    lowercase_hook,
-                ],
-            ),
-            LabelField("label"),
-        ]
+
+    # Use BERT subword tokenization
+    vocab = TokenizerVocabWrapper(tokenizer)
+    print(vocab.get_padding_index())
+    pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
+    fields = [
+        Field("id", disable_batch_matrix=True),
+        Field(
+            "text",
+            tokenizer=tokenizer.tokenize,
+            padding_token=pad_index,
+            numericalizer=tokenizer.convert_tokens_to_ids,
+            include_lengths=True,
+            posttokenize_hooks=[
+                remove_nonalnum,
+                MaxLenHook(max_seq_len),
+                lowercase_hook,
+            ],
+        ),
+        LabelField("label"),
+    ]
 
     train = TabularDataset(
         os.path.join(data_dir, "train.csv"), format="csv", fields=fields
@@ -459,7 +525,6 @@ def test_load_sst(max_vocab_size=20_000, max_seq_len=200):
     print(vocab.reverse_numericalize(text[0]))
     print(length[0])
     print(vocab.get_padding_index())
-
 
 
 def load_trec2(
@@ -573,7 +638,6 @@ def load_trec_hf(label="label-coarse", max_vocab_size=20_000, max_seq_len=200):
     return (train, val, test), vocab
 
 
-
 def add_ids_to_files(root_folder):
     split_ins = ["train_old.csv", "dev_old.csv", "test_old.csv"]
     split_outs = ["train.csv", "dev.csv", "test.csv"]
@@ -586,7 +650,6 @@ def add_ids_to_files(root_folder):
                     if idx == 0:
                         continue
                     outfile.write(f"{idx-1},{parts[0]},{parts[1]}\n")
-
 
 
 if __name__ == "__main__":

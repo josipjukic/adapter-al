@@ -40,7 +40,7 @@ class Experiment:
             train=False,
         )
 
-        self.test_lengths = self.extract_test_lengths()
+        # self.test_lengths = self.extract_test_lengths()
         self.test_id_mapping = self.get_test_id_mapping()
 
         self.ind2id, self.id2ind = self.create_id_mapping()
@@ -668,8 +668,8 @@ class Experiment:
 
             # Unpack batch & cast to device
             if self.meta.pair_sequence:
-                (x_premise, premise_lengths) = batch.premise
-                (x_hypothesis, hypothesis_lengths) = batch.hypothesis
+                (x_sequence1, sequence1_lengths) = batch.sequence1
+                (x_sequence2, sequence2_lengths) = batch.sequence2
             else:
                 (x, lengths) = batch.text
 
@@ -678,8 +678,8 @@ class Experiment:
 
             if self.meta.pair_sequence:
                 # PSQ
-                lengths = (premise_lengths, hypothesis_lengths)
-                logits, return_dict = model(x_premise, x_hypothesis, lengths)
+                lengths = (sequence1_lengths, sequence2_lengths)
+                logits, return_dict = model(x_sequence1, x_sequence2, lengths)
             else:
                 # SSQ
                 logits, return_dict = model(x, lengths)
@@ -802,13 +802,25 @@ class Experiment:
                 t = time.time()
 
                 # Unpack batch & cast to device
-                (x, lengths), y = batch.text, batch.label
+                if self.meta.pair_sequence:
+                    (x_sequence1, sequence1_lengths) = batch.sequence1
+                    (x_sequence2, sequence2_lengths) = batch.sequence2
+                else:
+                    (x, lengths) = batch.text
 
+                y = batch.label
                 y = y.squeeze()  # y needs to be a 1D tensor for xent(batch_size)
 
                 y_true_list.append(y.cpu())
 
-                logits, _ = model(x, lengths)
+                if self.meta.pair_sequence:
+                    # PSQ
+                    lengths = (sequence1_lengths, sequence2_lengths)
+                    logits, _ = model(x_sequence1, x_sequence2, lengths)
+                else:
+                    # SSQ
+                    logits, _ = model(x, lengths)
+
                 logit_list.append(logits.cpu())
 
                 # Bookkeeping and cast label to float
