@@ -55,19 +55,27 @@ class Transformer(nn.Module, AcquisitionModel):
 
         self.name = name
 
-        if pretrained:
+        if pretrained == "standard":
             name = f"pretrained/{config.model}-{config.data}"
         else:
             name = TRANSFORMERS[name]
+            
 
         if adapter:
             self.classifier = AutoAdapterModel.from_pretrained(name)
-            task_name = config.data
-            self.classifier.add_classification_head(
-                task_name, num_labels=meta.num_targets
-            )
-            adapter_config = ADAPTER_CONFIGS[adapter]()
-            self.classifier.add_adapter(task_name, config=adapter_config)
+            if pretrained == "adapter":
+                task_name = f"{config.data}-{config.model}-{config.adapter}"
+                self.classifier.add_classification_head(
+                    task_name, num_labels=meta.num_targets
+                )
+                self.classifier.load_adapter(f"adapters/{task_name}", with_head=False)
+            else:
+                task_name = config.data
+                self.classifier.add_classification_head(
+                    task_name, num_labels=meta.num_targets
+                )
+                adapter_config = ADAPTER_CONFIGS[adapter]()
+                self.classifier.add_adapter(task_name, config=adapter_config)
             # Enable adapter training
             self.classifier.train_adapter(task_name)
         else:
@@ -215,6 +223,14 @@ class PairSequenceClassifier(nn.Module, AcquisitionModel):
 def initialize_language_model(args, meta):
     model_cls = TRANSFORMERS[args.model]
     lm = AutoModelForMaskedLM.from_pretrained(model_cls)
+    if args.adapter:
+        adapter_config = ADAPTER_CONFIGS[args.adapter]()
+        task_name = f"{args.data}-{args.model}-{args.adapter}"
+        lm.add_adapter(
+            task_name,
+            config=adapter_config,
+        )
+        lm.train_adapter(task_name)
     return lm
 
 

@@ -132,4 +132,5 @@ data/
 log/
 results/
 pretrained/
+adapters/
 wandb/

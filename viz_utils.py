@@ -12,11 +12,12 @@ from scipy.special import softmax
 from al.sampler_mapping import AL_SAMPLERS
 
 
-def load_results(base_dir="results/", dataset="SUBJ", model="ELECTRA", load_anti=False):
+def load_results(base_dir="results/", dataset="SUBJ", model="BERT"):
     experiments = {}
-    file_names = tuple(f"{dataset}-{model}-{sampler}" for sampler in AL_SAMPLERS.keys() if not(not load_anti and sampler == "anti_entropy"))
+    start_string = f"{dataset}-{model}"
+    print(start_string)
     for filename in os.listdir(base_dir):
-        if filename.startswith(file_names) and filename.endswith(".pkl"):
+        if filename.startswith(start_string) and filename.endswith(".pkl"):
             with open(os.path.join(base_dir, filename), "rb") as f:
                 results, meta = pickle.load(f)
                 experiments[meta["al_sampler"]] = results
@@ -43,17 +44,18 @@ def al_auc(df, n=0):
         grouped.f1_macro.agg(lambda x: np.trapz(np.array(x)[:, n:], axis=1))
         / num_al_steps
     )
-    acc_avg = (
-        grouped.test_accuracy.agg(lambda x: np.mean(x, axis=1))
-    )
-    f1_micro_avg = (
-        grouped.f1_micro.agg(lambda x: np.mean(x, axis=1))
-    )
-    f1_macro_avg = (
-        grouped.f1_macro.agg(lambda x: np.mean(x, axis=1))
-    )
+    acc_avg = grouped.test_accuracy.agg(lambda x: np.mean(x, axis=1))
+    f1_micro_avg = grouped.f1_micro.agg(lambda x: np.mean(x, axis=1))
+    f1_macro_avg = grouped.f1_macro.agg(lambda x: np.mean(x, axis=1))
     df_auc = pd.DataFrame(
-        {"acc_auc": acc_auc, "micro_auc": f1_micro_auc, "macro_auc": f1_macro_auc, "acc_avg": acc_avg, "micro_avg": f1_micro_avg, "macro_avg": f1_macro_avg}
+        {
+            "acc_auc": acc_auc,
+            "micro_auc": f1_micro_auc,
+            "macro_auc": f1_macro_auc,
+            "acc_avg": acc_avg,
+            "micro_avg": f1_micro_avg,
+            "macro_avg": f1_macro_avg,
+        }
     )
     df_auc["acc_auc_mean"] = df_auc.acc_auc.apply(np.mean)
     df_auc["acc_auc_std"] = df_auc.acc_auc.apply(np.std)
@@ -138,7 +140,6 @@ def extract_ith_epoch(exp_set, besov_flag=False, epoch=-1):
 
         iter_vals = list(range(len(labeled_vals)))
 
-
         df_tr = pd.DataFrame(
             {
                 "al_iter": iter_vals,
@@ -207,7 +208,6 @@ def extract_best_epoch(exp_set):
 
         labeled_vals = experiment["labeled"]
         iter_vals = list(range(len(labeled_vals)))
-
 
         df_tr = pd.DataFrame(
             {

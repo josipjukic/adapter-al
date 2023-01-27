@@ -169,9 +169,9 @@ def make_parser():
 
     parser.add_argument(
         "--pretrain",
-        type=bool,
-        default=False,
-        help="Include MLM pretraining in each AL step.",
+        type=str,
+        choices=["standard", "adapter"],
+        help="TAPT(A).",
     )
 
     parser.add_argument(
@@ -206,7 +206,6 @@ def make_parser():
     parser.add_argument(
         "--adapter",
         type=str,
-        default="pfeiffer",
         help="Adapter.",
     )
 

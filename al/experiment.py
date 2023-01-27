@@ -136,11 +136,7 @@ class Experiment:
                 f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data..."
             )
             # Create new model: re-train scenario.
-            if self.args.pretrain:
-                model = create_model_fn(self.args, self.meta, pretrained=True)
-
-            else:
-                model = create_model_fn(self.args, self.meta)
+            model = create_model_fn(self.args, self.meta, self.args.pretrain)
 
             model.to(self.device)
 
