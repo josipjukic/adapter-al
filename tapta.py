@@ -35,7 +35,7 @@ if __name__ == "__main__":
         ],
     )
 
-    test_lengths = [len(ex.text[1]) for ex in test.examples]
+    # test_lengths = [len(ex.text[1]) for ex in test.examples]
     meta_info = {
         "dataset": args.data,
         "model": args.model,
@@ -66,8 +66,8 @@ if __name__ == "__main__":
         meta.num_targets = meta.num_labels
 
     experiment = Experiment(None, train, test, device, args, meta)
-    meta_info["test_lengths"] = experiment.test_lengths.tolist()
-    meta_info["test_mapping"] = experiment.get_test_id_mapping()
+    # meta_info["test_lengths"] = experiment.test_lengths.tolist()
+    # meta_info["test_mapping"] = experiment.get_test_id_mapping()
 
     mlm = experiment._pretrain_lm(tokenizer, epochs=args.epochs)
     mlm.save_adapter(

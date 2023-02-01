@@ -6,10 +6,11 @@ from dataloaders import make_iterable
 
 
 class Sampler(ABC):
-    def __init__(self, dataset, batch_size, device):
+    def __init__(self, dataset, batch_size, device, meta):
         self.dataset = dataset
         self.batch_size = batch_size
         self.device = device
+        self.meta = meta
 
     @abstractmethod
     def query(self, query_size, *args, **kwargs):
@@ -21,15 +22,14 @@ class Sampler(ABC):
         )
         out_list = []
         for batch in iter:
-            ret_val = batch.text
-            if type(ret_val) is tuple:
-                # Unpack inputs and lengths.
-                x, lengths = ret_val
+            if self.meta.pair_sequence:
+                (x_sequence1, sequence1_lengths) = batch.sequence1
+                (x_sequence2, sequence2_lengths) = batch.sequence2
+                lengths = (sequence1_lengths, sequence2_lengths)
+                out = forward_fn(x_sequence1, x_sequence2, lengths)
             else:
-                x = ret_val
-                # Set lengths to None to match the method's signature.
-                lengths = None
-            out = forward_fn(x, lengths=lengths)
+                (x, lengths) = batch.text
+                out = forward_fn(x, lengths=lengths)
             out_list.append(out)
 
         res = torch.cat(out_list)
