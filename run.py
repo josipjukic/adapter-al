@@ -106,6 +106,7 @@ if __name__ == "__main__":
                 batch_size=args.batch_size,
                 device=device,
                 meta=meta,
+                tokenizer=tokenizer,
             )
             active_learner = Experiment(sampler, train, test, device, args, meta)
 

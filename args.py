@@ -21,6 +21,8 @@ dataset_loaders = {
     "ISEAR": load_isear,
     "MNLI": load_mnli,
     "MRPC": load_mrpc,
+    "QQP": load_qqp,
+    "QNLI": load_qnli,
 }
 
 pair_sequence_datasets = {

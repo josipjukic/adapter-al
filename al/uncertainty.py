@@ -27,9 +27,9 @@ class MostConfidentSampler(Sampler):
 class LeastConfidentDropoutSampler(Sampler):
     name = "least_confident_dropout"
 
-    def __init__(self, dataset, batch_size, device, n_drop=10):
+    def __init__(self, n_drop=30, **kwargs):
         self.n_drop = n_drop
-        super().__init__(dataset, batch_size, device)
+        super().__init__(**kwargs)
 
     def query(self, query_size, unlab_inds, model, num_labels, **kwargs):
         probs = (
@@ -72,9 +72,9 @@ class AntiMarginSampler(Sampler):
 class MarginDropoutSampler(Sampler):
     name = "margin_dropout"
 
-    def __init__(self, dataset, batch_size, device, n_drop=10):
+    def __init__(self, n_drop=30, **kwargs):
         self.n_drop = n_drop
-        super().__init__(dataset, batch_size, device)
+        super().__init__(**kwargs)
 
     def query(self, query_size, unlab_inds, model, num_labels, **kwargs):
         probs = (
@@ -136,9 +136,9 @@ class AntiEntropySampler(Sampler):
 class EntropyDropoutSampler(Sampler):
     name = "entropy_dropout"
 
-    def __init__(self, dataset, batch_size, device, n_drop=30):
+    def __init__(self, n_drop=30, **kwargs):
         self.n_drop = n_drop
-        super().__init__(dataset, batch_size, device)
+        super().__init__(**kwargs)
 
     def query(self, query_size, unlab_inds, model, num_labels, **kwargs):
         probs = (

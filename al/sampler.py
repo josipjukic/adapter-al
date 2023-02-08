@@ -6,11 +6,12 @@ from dataloaders import make_iterable
 
 
 class Sampler(ABC):
-    def __init__(self, dataset, batch_size, device, meta):
+    def __init__(self, dataset, batch_size, device, meta, tokenizer):
         self.dataset = dataset
         self.batch_size = batch_size
         self.device = device
         self.meta = meta
+        self.tokenizer = tokenizer
 
     @abstractmethod
     def query(self, query_size, *args, **kwargs):
@@ -25,11 +26,15 @@ class Sampler(ABC):
             if self.meta.pair_sequence:
                 (x_sequence1, sequence1_lengths) = batch.sequence1
                 (x_sequence2, sequence2_lengths) = batch.sequence2
-                lengths = (sequence1_lengths, sequence2_lengths)
-                out = forward_fn(x_sequence1, x_sequence2, lengths)
+                sep = self.tokenizer.sep_token_id
+                n = x_sequence1.shape[0]
+                sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                lengths = sequence1_lengths + sequence2_lengths + 1
             else:
                 (x, lengths) = batch.text
-                out = forward_fn(x, lengths=lengths)
+            
+            out = forward_fn(x, lengths=lengths)
             out_list.append(out)
 
         res = torch.cat(out_list)

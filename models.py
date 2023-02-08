@@ -119,10 +119,7 @@ class Transformer(nn.Module, AcquisitionModel):
 
 
 def initialize_model(args, meta, pretrained=None):
-    if meta.pair_sequence:
-        model_cls = pair_sequence_models[args.model]
-    else:
-        model_cls = models[args.model]
+    model_cls = models[args.model]
     model = model_cls(
         config=args, meta=meta, pretrained=pretrained, adapter=args.adapter
     )
@@ -130,85 +127,112 @@ def initialize_model(args, meta, pretrained=None):
     return model
 
 
-class PairSequenceClassifier(nn.Module, AcquisitionModel):
-    def __init__(self, config, meta, name, pretrained=None, adapter=False):
-        super().__init__()
-        # add config.share_encoders
+# class PairSequenceClassifier(nn.Module, AcquisitionModel):
+#     def __init__(self, config, meta, name, pretrained=None, adapter=False):
+#         super().__init__()
 
-        self.first_sequence_encoder = AutoModel.from_pretrained(name)
-        if config.share_encoders:
-            # Use same encoder for both sequences
-            self.second_sequence_encoder = self.first_sequence_encoder
-        else:
-            # New set of parameters
-            self.second_sequence_encoder = AutoModel.from_pretrained(name)
+#         if pretrained == "standard":
+#             name = f"pretrained/{config.model}-{config.data}"
+#         else:
+#             name = TRANSFORMERS[name]
 
-        self.num_targets = meta.num_targets
-        self.model_config = (
-            self.first_sequence_encoder.config
-        )  # Fetch for hidden state size
-        self.encoder_hidden = self.model_config.hidden_size
+#         if adapter:
+#             self.classifier = AutoAdapterModel.from_pretrained(name)
+#             if pretrained == "adapter":
+#                 task_name = f"{config.data}-{config.model}-{config.adapter}"
+#                 self.classifier.add_classification_head(
+#                     task_name, num_labels=meta.num_targets
+#                 )
+#                 self.classifier.load_adapter(f"adapters/{task_name}", with_head=False)
+#             else:
+#                 task_name = config.data
+#                 self.classifier.add_classification_head(
+#                     task_name, num_labels=meta.num_targets
+#                 )
+#                 adapter_config = ADAPTER_CONFIGS[adapter]()
+#                 self.classifier.add_adapter(task_name, config=adapter_config)
+#             # Enable adapter training
+#             self.classifier.train_adapter(task_name)
+#         else:
+#             self.classifier = AutoModelForSequenceClassification.from_pretrained(
+#                 name, num_labels=meta.num_targets
+#             )
+#         self.num_targets = meta.num_targets
 
-        self.decoder = nn.Linear(
-            2 * self.encoder_hidden, self.num_targets
-        )  # concat > decoder
+#         self.first_sequence_encoder = AutoModel.from_pretrained(name)
+#         if config.share_encoders:
+#             # Use same encoder for both sequences
+#             self.second_sequence_encoder = self.first_sequence_encoder
+#         else:
+#             # New set of parameters
+#             self.second_sequence_encoder = AutoModel.from_pretrained(name)
 
-    def encode(self, first_sequence, second_sequence, lengths=None):
-        encoded_first_sequence = self.first_sequence_encoder(
-            first_sequence, output_hidden_states=True
-        ).hidden_states
-        embedded_first_sequence = encoded_first_sequence[0]
-        encoded_first_sequence = encoded_first_sequence[-1].mean(
-            dim=1
-        )  # Average across T
+#         self.num_targets = meta.num_targets
+#         self.model_config = (
+#             self.first_sequence_encoder.config
+#         )  # Fetch for hidden state size
+#         self.encoder_hidden = self.model_config.hidden_size
 
-        encoded_second_sequence = self.second_sequence_encoder(
-            second_sequence, output_hidden_states=True
-        ).hidden_states
-        embedded_second_sequence = encoded_second_sequence[0]
-        encoded_second_sequence = encoded_second_sequence[-1].mean(
-            dim=1
-        )  # Average across T
-        return (
-            encoded_first_sequence,
-            encoded_second_sequence,
-            embedded_first_sequence,
-            embedded_second_sequence,
-        )
+#         self.decoder = nn.Linear(
+#             2 * self.encoder_hidden, self.num_targets
+#         )  # concat > decoder
 
-    def forward(self, first_sequence, second_sequence, lengths=None):
+#     def encode(self, first_sequence, second_sequence, lengths=None):
+#         encoded_first_sequence = self.first_sequence_encoder(
+#             first_sequence, output_hidden_states=True
+#         ).hidden_states
+#         embedded_first_sequence = encoded_first_sequence[0]
+#         encoded_first_sequence = encoded_first_sequence[-1].mean(
+#             dim=1
+#         )  # Average across T
 
-        h_1, h_2, e_1, e_2 = self.encode(first_sequence, second_sequence, lengths)
+#         encoded_second_sequence = self.second_sequence_encoder(
+#             second_sequence, output_hidden_states=True
+#         ).hidden_states
+#         embedded_second_sequence = encoded_second_sequence[0]
+#         encoded_second_sequence = encoded_second_sequence[-1].mean(
+#             dim=1
+#         )  # Average across T
+#         return (
+#             encoded_first_sequence,
+#             encoded_second_sequence,
+#             embedded_first_sequence,
+#             embedded_second_sequence,
+#         )
 
-        pair_sequence_encoding = torch.cat([h_1, h_2], dim=-1)  # Concatenate along [h]
+#     def forward(self, first_sequence, second_sequence, lengths=None):
 
-        output = self.decoder(pair_sequence_encoding)
-        return_dict = {
-            "embeddings": (e_1, e_2),
-            "encoded": (h_1, h_2),
-        }
+#         h_1, h_2, e_1, e_2 = self.encode(first_sequence, second_sequence, lengths)
 
-        return output, return_dict
+#         pair_sequence_encoding = torch.cat([h_1, h_2], dim=-1)  # Concatenate along [h]
 
-    def predict_probs(self, first_sequence, second_sequence, lengths=None):
-        with torch.inference_mode():
-            logits, _ = self(first_sequence, second_sequence, lengths)
-            if self.num_targets == 1:
-                # Binary classification
-                y_pred = torch.sigmoid(logits)
-                y_pred = torch.cat([1.0 - y_pred, y_pred], dim=1)
-            else:
-                # Multiclass classification
-                y_pred = F.softmax(logits, dim=1)
-            return y_pred
+#         output = self.decoder(pair_sequence_encoding)
+#         return_dict = {
+#             "embeddings": (e_1, e_2),
+#             "encoded": (h_1, h_2),
+#         }
 
-    def get_encoder_dim(self):
-        return self.model_config.hidden_size * 2
+#         return output, return_dict
 
-    def get_encoded(self, first_sequence, second_sequence, lengths=None):
-        with torch.inference_mode():
-            h_1, h_2, _, _ = self.encode(first_sequence, second_sequence, lengths)
-            return torch.cat([h_1, h_2], dim=-1)
+#     def predict_probs(self, first_sequence, second_sequence, lengths=None):
+#         with torch.inference_mode():
+#             logits, _ = self(first_sequence, second_sequence, lengths)
+#             if self.num_targets == 1:
+#                 # Binary classification
+#                 y_pred = torch.sigmoid(logits)
+#                 y_pred = torch.cat([1.0 - y_pred, y_pred], dim=1)
+#             else:
+#                 # Multiclass classification
+#                 y_pred = F.softmax(logits, dim=1)
+#             return y_pred
+
+#     def get_encoder_dim(self):
+#         return self.model_config.hidden_size * 2
+
+#     def get_encoded(self, first_sequence, second_sequence, lengths=None):
+#         with torch.inference_mode():
+#             h_1, h_2, _, _ = self.encode(first_sequence, second_sequence, lengths)
+#             return torch.cat([h_1, h_2], dim=-1)
 
 
 def initialize_language_model(args, meta):
@@ -251,15 +275,15 @@ models = {
 }
 
 
-pair_sequence_models = {
-    "BERT": partial(PairSequenceClassifier, name="bert-base-uncased"),
-    "ALBERT": partial(PairSequenceClassifier, name="albert-base-v2"),
-    "ELECTRA": partial(
-        PairSequenceClassifier, name="google/electra-small-discriminator"
-    ),
-    "DistilBERT": partial(PairSequenceClassifier, name="distilbert-base-uncased"),
-    "RoBERTa": partial(PairSequenceClassifier, name="roberta-base"),
-}
+# pair_sequence_models = {
+#     "BERT": partial(PairSequenceClassifier, name="BERT"),
+#     "ALBERT": partial(PairSequenceClassifier, name="ALBERT"),
+#     "ELECTRA": partial(
+#         PairSequenceClassifier, name="ELECTRA"
+#     ),
+#     "DistilBERT": partial(PairSequenceClassifier, name="DistilBERT"),
+#     "RoBERTa": partial(PairSequenceClassifier, name="RoBERTa"),
+# }
 
 
 ADAPTER_CONFIGS = {

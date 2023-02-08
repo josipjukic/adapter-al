@@ -169,7 +169,9 @@ def extract_last_epoch(exp_set):
 
         labeled_vals = experiment["labeled"]
         iter_vals = list(range(len(labeled_vals)))
-
+        selected = experiment["selected"]
+        if len(selected) > len(iter_vals):
+            selected = selected[:-1]
         df_tr = pd.DataFrame(
             {
                 "al_iter": iter_vals,
@@ -178,6 +180,7 @@ def extract_last_epoch(exp_set):
                 "test_accuracy": accs,
                 "f1_micro": f1_micro,
                 "f1_macro": f1_macro,
+                "selected": selected,
             }
         )
 
@@ -195,9 +198,10 @@ def extract_best_epoch(exp_set):
     for exp_index, experiment in enumerate(exp_set):
         train = experiment["train"]
         test = experiment["eval"]
-        train_vals, f1_micro, f1_macro, accs, besov_layers = [], [], [], [], []
+        sels = experiment["selected"]
+        train_vals, f1_micro, f1_macro, accs = [], [], [], []
         indices = []
-        for tr, te in zip(train, test):
+        for tr, te, sel in zip(train, test, sels):
             test_accs = [t["accuracy"] for t in te]
             i = np.argpartition(test_accs, -1)[-1]
             indices.append(i)
@@ -209,6 +213,10 @@ def extract_best_epoch(exp_set):
         labeled_vals = experiment["labeled"]
         iter_vals = list(range(len(labeled_vals)))
 
+        selected = experiment["selected"]
+        if len(selected) > len(iter_vals):
+            selected = selected[:-1]
+
         df_tr = pd.DataFrame(
             {
                 "al_iter": iter_vals,
@@ -217,6 +225,7 @@ def extract_best_epoch(exp_set):
                 "test_accuracy": accs,
                 "f1_micro": f1_micro,
                 "f1_macro": f1_macro,
+                "selected": selected,
             }
         )
 

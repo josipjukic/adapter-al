@@ -371,6 +371,36 @@ def load_mrpc(
     )
 
 
+def load_qqp(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_sequence_pair_dataset(
+        "data/GLUE/QQP",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+def load_qnli(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_sequence_pair_dataset(
+        "data/GLUE/QNLI",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
 def test_load_cola(meta, tok):
     splits, vocab = load_cola(meta, tok)
     print(vocab)
@@ -453,7 +483,6 @@ def load_dataset(
 
     # Use BERT subword tokenization
     vocab = TokenizerVocabWrapper(tokenizer)
-    print(vocab.get_padding_index())
     pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     fields = [
         Field("id", disable_batch_matrix=True),
@@ -475,7 +504,9 @@ def load_dataset(
     train = TabularDataset(
         os.path.join(data_dir, "train.csv"), format="csv", fields=fields
     )
-    val = TabularDataset(os.path.join(data_dir, "dev.csv"), format="csv", fields=fields)
+    val = TabularDataset(
+        os.path.join(data_dir, "validation.csv"), format="csv", fields=fields
+    )
     test = TabularDataset(
         os.path.join(data_dir, "test.csv"), format="csv", fields=fields
     )
@@ -487,8 +518,6 @@ def load_dataset(
     meta.padding_idx = vocab.get_padding_index()
     meta.num_labels = len(train.field("label").vocab)
 
-    print("VOCAB", train.field("text").vocab)
-
     return (train, val, test), vocab
 
 
@@ -499,7 +528,7 @@ def load_sst(
     max_seq_len=200,
 ):
     return load_dataset(
-        "data/SST",
+        "data/GLUE/SST-2",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
@@ -567,7 +596,7 @@ def load_cola(
 ):
 
     return load_dataset(
-        "data/COLA",
+        "data/GLUE/COLA",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,

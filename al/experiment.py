@@ -162,12 +162,11 @@ class Experiment:
             acc = []
             loss = []
 
-            break_ = False
             for epoch in range(1, self.args.epochs + 1):
                 logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
                 # a) Train for one epoch
                 result_dict_train, logits, y_true, ids = self._train_model(
-                    model, optimizer, criterion, train_iter
+                    model, optimizer, criterion, train_iter, tokenizer
                 )
                 if self.args.scheduler:
                     scheduler.step()
@@ -175,13 +174,10 @@ class Experiment:
                 train_results.append(result_dict_train)
 
                 # b) Evaluate model (test set)
-                eval_result_dict = self._evaluate_model(model)
+                eval_result_dict = self._evaluate_model(model, tokenizer)
                 acc.append(eval_result_dict["accuracy"])
                 loss.append(result_dict_train["loss"])
                 eval_results.append(eval_result_dict)
-
-                if break_:
-                    break
 
             wandb.log(eval_result_dict | {"selected": lab_mask.sum()})
 
@@ -648,7 +644,7 @@ class Experiment:
         y_true = torch.cat(y_true_list)
         return result_dict, logit_tensor, y_true
 
-    def _train_model(self, model, optimizer, criterion, train_iter):
+    def _train_model(self, model, optimizer, criterion, train_iter, tokenizer):
         model.train()
 
         total_loss = 0.0
@@ -670,19 +666,17 @@ class Experiment:
             if self.meta.pair_sequence:
                 (x_sequence1, sequence1_lengths) = batch.sequence1
                 (x_sequence2, sequence2_lengths) = batch.sequence2
+                sep = tokenizer.sep_token_id
+                n = x_sequence1.shape[0]
+                sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                lengths = sequence1_lengths + sequence2_lengths + 1
             else:
                 (x, lengths) = batch.text
 
             y = batch.label
             y_true_list.append(y.squeeze(0) if y.numel() == 1 else y.squeeze())
-
-            if self.meta.pair_sequence:
-                # PSQ
-                lengths = (sequence1_lengths, sequence2_lengths)
-                logits, return_dict = model(x_sequence1, x_sequence2, lengths)
-            else:
-                # SSQ
-                logits, return_dict = model(x, lengths)
+            logits, return_dict = model(x, lengths)
             logit_list.append(logits)
 
             # Bookkeeping and cast label to float
@@ -785,7 +779,7 @@ class Experiment:
 
         return block_loss_tensor.mean()
 
-    def _evaluate_model(self, model):
+    def _evaluate_model(self, model, tokenizer):
         model.eval()
 
         data = self.test_iter
@@ -805,6 +799,11 @@ class Experiment:
                 if self.meta.pair_sequence:
                     (x_sequence1, sequence1_lengths) = batch.sequence1
                     (x_sequence2, sequence2_lengths) = batch.sequence2
+                    sep = tokenizer.sep_token_id
+                    n = x_sequence1.shape[0]
+                    sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                    lengths = sequence1_lengths + sequence2_lengths + 1
                 else:
                     (x, lengths) = batch.text
 
@@ -813,13 +812,7 @@ class Experiment:
 
                 y_true_list.append(y.cpu())
 
-                if self.meta.pair_sequence:
-                    # PSQ
-                    lengths = (sequence1_lengths, sequence2_lengths)
-                    logits, _ = model(x_sequence1, x_sequence2, lengths)
-                else:
-                    # SSQ
-                    logits, _ = model(x, lengths)
+                logits, _ = model(x, lengths)
 
                 logit_list.append(logits.cpu())
 
@@ -1003,7 +996,7 @@ class Experiment:
             logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
             # a) Train for one epoch
             result_dict_train, logits, y_true, ids = self._train_model(
-                model, optimizer, criterion, train_iter
+                model, optimizer, criterion, train_iter, tokenizer
             )
 
             # b) Calculate epoch cartography
