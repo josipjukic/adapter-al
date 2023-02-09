@@ -33,10 +33,6 @@ pair_sequence_datasets = {
     "RTE",
 }
 
-
-unbiased_estimators = ["PURE", "LURE"]
-
-
 def make_parser():
     parser = argparse.ArgumentParser(description="Active Learning")
     parser.add_argument(
@@ -49,7 +45,7 @@ def make_parser():
         "--model",
         type=str,
         default="BERT",
-        help="Model: [ALBERT, BERT, ELECTRA, RoBERTa, DistilBERT]",
+        help="Model: [BERT, RoBERTa]",
     )
 
     parser.add_argument("--lr", type=float, default=2e-5, help="initial learning rate")
@@ -141,13 +137,6 @@ def make_parser():
     )
 
     parser.add_argument(
-        "--unbiased",
-        type=str,
-        default="none",
-        help="Unbiased estimator: [PURE, LURE]. If 'none', then ignored.",
-    )
-
-    parser.add_argument(
         "--repr-stats",
         type=bool,
         default=False,
@@ -193,10 +182,6 @@ def make_parser():
         "--adapter",
         type=str,
         help="Adapter.",
-    )
-
-    parser.add_argument(
-        "--share-encoders", type=bool, default=True, help="Share encoders."
     )
 
     return parser.parse_args()

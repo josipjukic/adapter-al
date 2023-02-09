@@ -2,7 +2,7 @@ import os
 import torch
 
 import numpy as np
-from podium import Vocab, Field, LabelField, Iterator  # , BucketIterator
+from podium import Vocab, Field, LabelField, Iterator
 from podium.datasets import TabularDataset
 from podium.datasets.hf import HFDatasetConverter
 from podium.vectorizers import GloVe
@@ -135,7 +135,7 @@ class BucketIterator(Iterator):
 
 class TokenizerVocabWrapper:
     def __init__(self, tokenizer):
-        # wrap BertTokenizer so the method signatures align with podium
+        # Wrap BertTokenizer so the method signatures align with podium
         self.tokenizer = tokenizer
 
     def get_padding_index(self):
@@ -149,16 +149,8 @@ class TokenizerVocabWrapper:
         return self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(instance))
 
 
-def load_embeddings(vocab, name="glove"):
-    if name == "glove":
-        glove = GloVe()
-        embeddings = glove.load_vocab(vocab)
-        return embeddings
-    else:
-        raise ValueError(f"Wrong embedding key provided {name}")
 
-
-def make_iterable(dataset, device, batch_size=32, train=False, indices=None):
+def make_iterable(dataset, device, batch_size=32, train=False, indices=None, bucket=False):
     """
     Construct a DataLoader from a podium Dataset
     """
@@ -174,21 +166,22 @@ def make_iterable(dataset, device, batch_size=32, train=False, indices=None):
     if indices is not None:
         dataset = dataset[indices]
 
-    # iterator = BucketIterator(
-    #     dataset,
-    #     batch_size=batch_size,
-    #     sort_key=instance_length,
-    #     shuffle=train,
-    #     matrix_class=cast_to_device,
-    #     look_ahead_multiplier=20,
-    # )
-
-    iterator = Iterator(
-        dataset,
-        batch_size=batch_size,
-        shuffle=train,
-        matrix_class=cast_to_device,
-    )
+    if bucket:
+        iterator = BucketIterator(
+            dataset,
+            batch_size=batch_size,
+            sort_key=instance_length,
+            shuffle=train,
+            matrix_class=cast_to_device,
+            look_ahead_multiplier=20,
+        )
+    else:
+        iterator = Iterator(
+            dataset,
+            batch_size=batch_size,
+            shuffle=train,
+            matrix_class=cast_to_device,
+        )
 
     return iterator
 
@@ -214,46 +207,6 @@ class Instance:
     def __repr__(self):
         return f"{self.index}: {self.length}, {self.label}"
 
-
-def generate_eraser_rationale_mask(tokens, evidences):
-    mask = torch.zeros(len(tokens))  # zeros for where you can attend to
-
-    any_evidence_left = False
-    for ev in evidences:
-        if ev.start_token > len(tokens) or ev.end_token > len(tokens):
-            continue  # evidence out of span
-
-        if not any_evidence_left:
-            any_evidence_left = True
-        # 1. Validate
-
-        assert ev.text == " ".join(
-            tokens[ev.start_token : ev.end_token]
-        ), "Texts dont match; did you filter some tokens?"
-
-        mask[ev.start_token : ev.end_token] = 1
-    return mask
-
-
-def load_tse(
-    train_path="data/TSE/train.csv", test_path="data/TSE/test.csv", max_size=20000
-):
-
-    vocab = Vocab(max_size=max_size)
-    fields = [
-        Field("id", numericalizer=None),
-        Field("text", numericalizer=vocab, include_lengths=True),
-        Field("rationale", numericalizer=vocab),
-        LabelField("label"),
-    ]
-    train_dataset = TabularDataset(
-        train_path, format="csv", fields=fields, skip_header=True
-    )
-    test_dataset = TabularDataset(
-        test_path, format="csv", fields=fields, skip_header=True
-    )
-    train_dataset.finalize_fields()
-    return (train_dataset, test_dataset), vocab
 
 
 class MaxLenHook:
@@ -401,23 +354,118 @@ def load_qnli(
     )
 
 
-def test_load_cola(meta, tok):
-    splits, vocab = load_cola(meta, tok)
-    print(vocab)
-    train, valid, test = splits
-    print(len(train), len(valid), len(test))
+def load_sst(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_dataset(
+        "data/GLUE/SST-2",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
 
-    print(train)
-    print(train[0])
 
-    device = torch.device("cpu")
-    train_iter = make_iterable(test, device, batch_size=2)
-    batch = next(iter(train_iter))
+def load_trec2(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
 
-    print(batch)
-    text, length = batch.text
-    print(length[0])
-    print(vocab.get_padding_index())
+    return load_dataset(
+        "data/TREC-2",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+def load_trec6(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+
+    return load_dataset(
+        "data/TREC-6",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+def load_cola(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+
+    return load_dataset(
+        "data/GLUE/COLA",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+def load_polarity(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+
+    return load_dataset(
+        "data/POL",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+def load_subj(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+
+    return load_dataset(
+        "data/SUBJ",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+# def test_load_cola(meta, tok):
+#     splits, vocab = load_cola(meta, tok)
+#     print(vocab)
+#     train, valid, test = splits
+#     print(len(train), len(valid), len(test))
+
+#     print(train)
+#     print(train[0])
+
+#     device = torch.device("cpu")
+#     train_iter = make_iterable(test, device, batch_size=2)
+#     batch = next(iter(train_iter))
+
+#     print(batch)
+#     text, length = batch.text
+#     print(length[0])
+#     print(vocab.get_padding_index())
 
 
 def load_sequence_pair_dataset(
@@ -426,7 +474,6 @@ def load_sequence_pair_dataset(
 
     # Use BERT subword tokenization
     vocab = TokenizerVocabWrapper(tokenizer)
-    print(vocab.get_padding_index())
     pad_index = tokenizer.convert_tokens_to_ids(tokenizer.pad_token)
     fields = [
         Field("id", disable_batch_matrix=True),
@@ -521,152 +568,6 @@ def load_dataset(
     return (train, val, test), vocab
 
 
-def load_sst(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-    return load_dataset(
-        "data/GLUE/SST-2",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def test_load_sst(max_vocab_size=20_000, max_seq_len=200):
-    splits, vocab = load_sst()
-    print(vocab)
-    train, valid, test = splits
-    print(len(train), len(valid), len(test))
-
-    print(train)
-    print(train[0])
-
-    device = torch.device("cpu")
-    train_iter = make_iterable(train, device, batch_size=2)
-    batch = next(iter(train_iter))
-
-    print(batch)
-    text, length = batch.text
-    print(vocab.reverse_numericalize(text[0]))
-    print(length[0])
-    print(vocab.get_padding_index())
-
-
-def load_trec2(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/TREC-2",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_trec6(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/TREC-6",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_cola(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/GLUE/COLA",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_polarity(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/POL",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_subj(
-    meta,
-    tokenizer=None,
-    max_vocab_size=20_000,
-    max_seq_len=200,
-):
-
-    return load_dataset(
-        "data/SUBJ",
-        meta=meta,
-        tokenizer=tokenizer,
-        max_vocab_size=max_vocab_size,
-        max_seq_len=max_seq_len,
-    )
-
-
-def load_trec_hf(label="label-coarse", max_vocab_size=20_000, max_seq_len=200):
-    vocab = Vocab(max_size=max_vocab_size)
-    fields = [
-        Field(
-            "text",
-            numericalizer=vocab,
-            include_lengths=True,
-            posttokenize_hooks=[MaxLenHook(max_seq_len)],
-            keep_raw=True,
-        ),
-        LabelField("label"),
-    ]
-    hf_dataset = load_dataset("trec")
-    hf_dataset = hf_dataset.rename_column(label, "label")
-    print(hf_dataset)
-    hf_train_val, hf_test = (
-        hf_dataset["train"],
-        hf_dataset["test"],
-    )
-    train_val_conv = HFDatasetConverter(hf_train_val, fields=fields)
-    test_conv = HFDatasetConverter(hf_test, fields=fields)
-    train_val, test = (
-        train_val_conv.as_dataset(),
-        test_conv.as_dataset(),
-    )
-    train, val = train_val.split(split_ratio=0.8, random_state=0)
-    train.finalize_fields()
-    print(train)
-    return (train, val, test), vocab
-
-
 def add_ids_to_files(root_folder):
     split_ins = ["train_old.csv", "dev_old.csv", "test_old.csv"]
     split_outs = ["train.csv", "dev.csv", "test.csv"]
@@ -684,19 +585,4 @@ def add_ids_to_files(root_folder):
 if __name__ == "__main__":
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
     meta = Config()
-    test_load_cola(meta, tokenizer)
-    # (train, dev, test), vocab = load_imdb_rationale()
-    # print(len(train), len(dev), len(test))
-    # print(train[0].keys())
-
-    # device = torch.device("cpu")
-    # train_iter = make_iterable(train, device, batch_size=2)
-    # batch = next(iter(train_iter))
-
-    # print(batch)
-    # text, length = batch.text
-    # rationale = batch.rationale
-    # print(vocab.reverse_numericalize(text[0]))
-    # print(length[0])
-    # print(vocab.get_padding_index())
-    # print(rationale)
+    # test_load_cola(meta, tokenizer)
