@@ -28,6 +28,7 @@ if __name__ == "__main__":
 
     dataloader = dataset_loaders[args.data]
 
+
     tokenizer = None
     if args.model in TRANSFORMERS.keys():
         tokenizer = AutoTokenizer.from_pretrained(TRANSFORMERS[args.model])

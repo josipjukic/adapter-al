@@ -24,6 +24,11 @@ if __name__ == "__main__":
 
     (train, val, test), vocab = dataloader(meta=meta, tokenizer=tokenizer)
 
+    if args.data in pair_sequence_datasets:
+        meta.pair_sequence = True
+    else:
+        meta.pair_sequence = False
+
     # Initialize logging
     fmt = "%Y-%m-%d-%H-%M"
     start_time = fname = datetime.now().strftime(fmt)

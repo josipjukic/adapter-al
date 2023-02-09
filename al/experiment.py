@@ -144,7 +144,6 @@ class Experiment:
                 batch_size=self.batch_size,
                 train=True,
                 indices=indices,
-                bucket=True,
             )
 
             optimizer = torch.optim.AdamW(
@@ -322,7 +321,16 @@ class Experiment:
 
             total_loss = 0
             for batch_num, batch in enumerate(train_iter, 1):
-                inputs, _ = batch.text
+                    # Unpack batch & cast to device
+                if self.meta.pair_sequence:
+                    (x_sequence1, _) = batch.sequence1
+                    (x_sequence2, _) = batch.sequence2
+                    sep = tokenizer.sep_token_id
+                    n = x_sequence1.shape[0]
+                    sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    inputs = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                else:
+                    (inputs, _) = batch.text
                 labels = inputs.clone()
                 probability_matrix = torch.full(labels.shape, mlm_prob).to(self.device)
                 # TODO: account for special tokens (masked them out in the prob matrix)
