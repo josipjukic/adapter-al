@@ -14,8 +14,8 @@ class DiscriminativeRepresentationSampling(Sampler):
 
     name = "dal"
 
-    def __init__(self, dataset, batch_size, device):
-        super().__init__(dataset, batch_size, device)
+    def __init__(self, dataset, batch_size, device, meta, tokenizer):
+        super().__init__(dataset, batch_size, device, meta, tokenizer)
         self.sub_batches = 10
 
     def query(self, query_size, unlab_inds, lab_inds, model, **kwargs):

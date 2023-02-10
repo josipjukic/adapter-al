@@ -98,9 +98,6 @@ if __name__ == "__main__":
                 criterion = nn.CrossEntropyLoss()
                 meta.num_targets = meta.num_labels
 
-            if args.unbiased in unbiased_estimators:
-                criterion.reduction = "none"
-
             sampler_cls = get_al_sampler(sampler_name)
             sampler = sampler_cls(
                 dataset=train,
@@ -111,23 +108,13 @@ if __name__ == "__main__":
             )
             active_learner = Experiment(sampler, train, test, device, args, meta)
 
-            if args.unbiased in unbiased_estimators:
-                results = active_learner.unbiased_loop(
-                    create_model_fn=initialize_model,
-                    criterion=criterion,
-                    warm_start_size=args.warm_start_size,
-                    query_size=args.query_size,
-                    mode=args.unbiased,
-                    tokenizer=tokenizer,
-                )
-            else:
-                results = active_learner.al_loop(
-                    create_model_fn=initialize_model,
-                    criterion=criterion,
-                    warm_start_size=args.warm_start_size,
-                    query_size=args.query_size,
-                    tokenizer=tokenizer,
-                )
+            results = active_learner.al_loop(
+                create_model_fn=initialize_model,
+                criterion=criterion,
+                warm_start_size=args.warm_start_size,
+                query_size=args.query_size,
+                tokenizer=tokenizer,
+            )
 
             result_list.append(results)
 
