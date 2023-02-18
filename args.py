@@ -23,6 +23,7 @@ dataset_loaders = {
     "MRPC": load_mrpc,
     "QQP": load_qqp,
     "QNLI": load_qnli,
+    "RTE": load_rte,
 }
 
 pair_sequence_datasets = {
