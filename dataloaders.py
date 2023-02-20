@@ -4,7 +4,6 @@ import torch
 import numpy as np
 from podium import Vocab, Field, LabelField, Iterator
 from podium.datasets import TabularDataset
-from podium.datasets.hf import HFDatasetConverter
 from podium.vectorizers import GloVe
 from podium.utils.general_utils import repr_type_and_attrs
 
