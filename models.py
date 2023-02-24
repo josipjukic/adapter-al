@@ -27,9 +27,9 @@ from transformers.adapters import (
 )
 
 
-SequenceClassifierOutput = namedtuple(
-    "SequenceClassifierOutput", ["loss", "logits", "hidden_states", "attentions"]
-)
+# SequenceClassifierOutput = namedtuple(
+#     "SequenceClassifierOutput", ["loss", "logits", "hidden_states", "attentions"]
+# )
 
 
 class AcquisitionModel:
@@ -90,6 +90,86 @@ class Transformer(nn.Module, AcquisitionModel):
             "embeddings": e,
             "encoded": hidden,
         }
+
+        return logits, return_dict
+
+    def predict_probs(self, inputs, lengths=None):
+        with torch.inference_mode():
+            logits, _ = self(inputs, lengths)
+            if self.num_targets == 1:
+                # Binary classification
+                y_pred = torch.sigmoid(logits)
+                y_pred = torch.cat([1.0 - y_pred, y_pred], dim=1)
+            else:
+                # Multiclass classification
+                y_pred = F.softmax(logits, dim=1)
+            return y_pred
+
+    def get_encoder_dim(self):
+        return self.classifier.config.hidden_size
+
+    def get_encoded(self, inputs, lengths=None):
+        with torch.inference_mode():
+            output = self.classifier(inputs, output_hidden_states=True)
+            hidden = output.hidden_states[-1][:, 0, :]
+            return hidden
+
+    def get_classifier_name(self):
+        return TRANSFORMER_CLASSIFIERS[self.name]
+
+
+class Transformer2(nn.Module, AcquisitionModel):
+    def __init__(self, config, meta, name, pretrained=None, adapter=False):
+        super().__init__()
+
+        self.name = name
+
+        if pretrained == "standard":
+            name = f"pretrained/{config.model}-{config.data}"
+        else:
+            name = TRANSFORMERS[name]
+
+        if adapter:
+            self.classifier = AutoAdapterModel.from_pretrained(name)
+            if pretrained == "adapter":
+                task_name = f"{config.data}-{config.model}-{config.adapter}"
+                self.classifier.add_classification_head(
+                    task_name, num_labels=meta.num_targets
+                )
+                self.classifier.load_adapter(f"adapters/{task_name}", with_head=False)
+            else:
+                task_name = config.data
+                self.classifier.add_classification_head(
+                    task_name, num_labels=meta.num_targets
+                )
+                adapter_config = ADAPTER_CONFIGS[adapter]()
+                self.classifier.add_adapter(task_name, config=adapter_config)
+            # Enable adapter training
+            self.classifier.train_adapter(task_name)
+        else:
+            self.classifier = AutoModelForSequenceClassification.from_pretrained(
+                name, num_labels=meta.num_targets
+            )
+        self.num_targets = meta.num_targets
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+    ):
+        output = self.classifier(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            output_hidden_states=True,
+        )
+        loss = output.loss
+        logits = output.logits
+        hidden_states = output.hidden_states
+        e = hidden_states[0].mean(dim=1)
+        hidden = hidden_states[-1][:, 0, :]
+        return_dict = {"embeddings": e, "encoded": hidden, "loss": loss}
 
         return logits, return_dict
 
@@ -273,17 +353,6 @@ models = {
     "DistilBERT": partial(Transformer, name="DistilBERT"),
     "RoBERTa": partial(Transformer, name="RoBERTa"),
 }
-
-
-# pair_sequence_models = {
-#     "BERT": partial(PairSequenceClassifier, name="BERT"),
-#     "ALBERT": partial(PairSequenceClassifier, name="ALBERT"),
-#     "ELECTRA": partial(
-#         PairSequenceClassifier, name="ELECTRA"
-#     ),
-#     "DistilBERT": partial(PairSequenceClassifier, name="DistilBERT"),
-#     "RoBERTa": partial(PairSequenceClassifier, name="RoBERTa"),
-# }
 
 
 ADAPTER_CONFIGS = {
