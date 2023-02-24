@@ -28,12 +28,14 @@ class Sampler(ABC):
                 (x_sequence2, sequence2_lengths) = batch.sequence2
                 sep = self.tokenizer.sep_token_id
                 n = x_sequence1.shape[0]
-                sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                sep_tensor = (
+                    torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                )
                 x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 lengths = sequence1_lengths + sequence2_lengths + 1
             else:
                 (x, lengths) = batch.text
-            
+
             out = forward_fn(x, lengths=lengths)
             out_list.append(out)
 
@@ -103,7 +105,18 @@ class Sampler(ABC):
 
         for i, batch in enumerate(iter, 1):
             # print(f"Batch: {i}/{len(iter)}")
-            x, lengths = batch.text
+            if self.meta.pair_sequence:
+                (x_sequence1, sequence1_lengths) = batch.sequence1
+                (x_sequence2, sequence2_lengths) = batch.sequence2
+                sep = self.tokenizer.sep_token_id
+                n = x_sequence1.shape[0]
+                sep_tensor = (
+                    torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                )
+                x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                lengths = sequence1_lengths + sequence2_lengths + 1
+            else:
+                (x, lengths) = batch.text
             start = index
             end = start + x.shape[0]
 
@@ -165,14 +178,25 @@ class Sampler(ABC):
 
         for batch in iter:
 
-            inputs, lengths = batch.text
-            inputs.requires_grad = False
+            if self.meta.pair_sequence:
+                (x_sequence1, sequence1_lengths) = batch.sequence1
+                (x_sequence2, sequence2_lengths) = batch.sequence2
+                sep = self.tokenizer.sep_token_id
+                n = x_sequence1.shape[0]
+                sep_tensor = (
+                    torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                )
+                x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
+                lengths = sequence1_lengths + sequence2_lengths + 1
+            else:
+                (x, lengths) = batch.text
+            x.requires_grad = False
             # pad_idx = self.meta.padding_idx
             # attention_mask = inputs != pad_idx
             name = model.get_classifier_name()
             clf = getattr(model.classifier, name)
             config = model.classifier.config
-            embedded_tokens = clf.embeddings(inputs)
+            embedded_tokens = clf.embeddings(x)
             embedded_tokens = torch.autograd.Variable(
                 embedded_tokens, requires_grad=True
             )

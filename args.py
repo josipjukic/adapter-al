@@ -33,6 +33,7 @@ pair_sequence_datasets = {
     "RTE",
 }
 
+
 def make_parser():
     parser = argparse.ArgumentParser(description="Active Learning")
     parser.add_argument(
@@ -117,6 +118,7 @@ def make_parser():
             "core_set",
             "dal",
             "anti_entropy",
+            "badge",
         ],
         help="Specify a list of active learning samplers.",
     )
