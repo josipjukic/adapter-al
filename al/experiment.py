@@ -321,13 +321,15 @@ class Experiment:
 
             total_loss = 0
             for batch_num, batch in enumerate(train_iter, 1):
-                    # Unpack batch & cast to device
+                # Unpack batch & cast to device
                 if self.meta.pair_sequence:
                     (x_sequence1, _) = batch.sequence1
                     (x_sequence2, _) = batch.sequence2
                     sep = tokenizer.sep_token_id
                     n = x_sequence1.shape[0]
-                    sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    sep_tensor = (
+                        torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    )
                     inputs = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 else:
                     (inputs, _) = batch.text
@@ -376,7 +378,6 @@ class Experiment:
 
         return lm
 
-
     def _train_model(self, model, optimizer, criterion, train_iter, tokenizer):
         model.train()
 
@@ -401,7 +402,9 @@ class Experiment:
                 (x_sequence2, sequence2_lengths) = batch.sequence2
                 sep = tokenizer.sep_token_id
                 n = x_sequence1.shape[0]
-                sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                sep_tensor = (
+                    torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                )
                 x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 lengths = sequence1_lengths + sequence2_lengths + 1
             else:
@@ -409,7 +412,7 @@ class Experiment:
 
             y = batch.label
             y_true_list.append(y.squeeze(0) if y.numel() == 1 else y.squeeze())
-            logits, return_dict = model(x, lengths)
+            logits, return_dict = model(x)
             logit_list.append(logits)
 
             # Bookkeeping and cast label to float
@@ -444,7 +447,6 @@ class Experiment:
         y_true = torch.cat(y_true_list)
         return result_dict, logit_tensor, y_true, ids
 
-   
     def _evaluate_model(self, model, tokenizer):
         model.eval()
 
@@ -467,7 +469,9 @@ class Experiment:
                     (x_sequence2, sequence2_lengths) = batch.sequence2
                     sep = tokenizer.sep_token_id
                     n = x_sequence1.shape[0]
-                    sep_tensor = torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    sep_tensor = (
+                        torch.tensor(sep, device=self.device).repeat(n).reshape(n, 1)
+                    )
                     x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                     lengths = sequence1_lengths + sequence2_lengths + 1
                 else:
@@ -478,7 +482,7 @@ class Experiment:
 
                 y_true_list.append(y.cpu())
 
-                logits, _ = model(x, lengths)
+                logits, _ = model(x)
 
                 logit_list.append(logits.cpu())
 
@@ -524,7 +528,6 @@ class Experiment:
 
         return result_dict
 
-
     @staticmethod
     def update_stats(accuracy, confusion_matrix, logits, y):
         if logits.shape[-1] == 1:
@@ -543,7 +546,6 @@ class Experiment:
                 confusion_matrix[int(i), int(j)] += 1
 
         return accuracy + correct, confusion_matrix
-
 
     def extract_test_lengths(self):
         len_list = []

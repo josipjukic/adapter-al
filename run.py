@@ -28,7 +28,6 @@ if __name__ == "__main__":
 
     dataloader = dataset_loaders[args.data]
 
-
     tokenizer = None
     if args.model in TRANSFORMERS.keys():
         tokenizer = AutoTokenizer.from_pretrained(TRANSFORMERS[args.model])
@@ -41,6 +40,11 @@ if __name__ == "__main__":
         meta.pair_sequence = True
     else:
         meta.pair_sequence = False
+
+    if args.data in seq_lab_datasets:
+        meta.task_type = "seq"
+    else:
+        meta.task_type = "clf"
 
     for sampler_name in args.al_samplers:
         result_list = []

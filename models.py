@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from transformers import (
     AutoModel,
     AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
     AutoModelForMaskedLM,
     AutoAdapterModel,
 )
@@ -124,30 +125,27 @@ class Transformer2(nn.Module, AcquisitionModel):
 
         self.name = name
 
+        model_cls = MODEL_CLS[meta.task_type]
+
         if pretrained == "standard":
             name = f"pretrained/{config.model}-{config.data}"
         else:
             name = TRANSFORMERS[name]
 
         if adapter:
-            self.classifier = AutoAdapterModel.from_pretrained(name)
+            task_name = f"{config.data}-{config.model}-{config.adapter}"
+            self.classifier = model_cls.from_pretrained(
+                name, num_labels=meta.num_targets
+            )
             if pretrained == "adapter":
-                task_name = f"{config.data}-{config.model}-{config.adapter}"
-                self.classifier.add_classification_head(
-                    task_name, num_labels=meta.num_targets
-                )
                 self.classifier.load_adapter(f"adapters/{task_name}", with_head=False)
             else:
-                task_name = config.data
-                self.classifier.add_classification_head(
-                    task_name, num_labels=meta.num_targets
-                )
                 adapter_config = ADAPTER_CONFIGS[adapter]()
                 self.classifier.add_adapter(task_name, config=adapter_config)
             # Enable adapter training
             self.classifier.train_adapter(task_name)
         else:
-            self.classifier = AutoModelForSequenceClassification.from_pretrained(
+            self.classifier = model_cls.from_pretrained(
                 name, num_labels=meta.num_targets
             )
         self.num_targets = meta.num_targets
@@ -347,7 +345,7 @@ TRANSFORMER_CLASSIFIERS = {
 
 
 models = {
-    "BERT": partial(Transformer, name="BERT"),
+    "BERT": partial(Transformer2, name="BERT"),
     "ALBERT": partial(Transformer, name="ALBERT"),
     "ELECTRA": partial(Transformer, name="ELECTRA"),
     "DistilBERT": partial(Transformer, name="DistilBERT"),
@@ -365,4 +363,10 @@ ADAPTER_CONFIGS = {
     "mam": MAMConfig,
     "compacter": CompacterConfig,
     "unipelt": UniPELTConfig,
+}
+
+
+MODEL_CLS = {
+    "clf": AutoModelForSequenceClassification,
+    "seq": AutoModelForTokenClassification,
 }

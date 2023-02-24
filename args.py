@@ -34,6 +34,8 @@ pair_sequence_datasets = {
     "RTE",
 }
 
+seq_lab_datasets = {}
+
 
 def make_parser():
     parser = argparse.ArgumentParser(description="Active Learning")
