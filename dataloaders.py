@@ -4,7 +4,6 @@ import torch
 import numpy as np
 from podium import Vocab, Field, LabelField, Iterator
 from podium.datasets import TabularDataset
-from podium.datasets.hf import HFDatasetConverter
 from podium.vectorizers import GloVe
 from podium.utils.general_utils import repr_type_and_attrs
 
@@ -302,6 +301,22 @@ def load_mnli(
 ):
     return load_sequence_pair_dataset(
         "data/GLUE/MNLI",
+        meta=meta,
+        tokenizer=tokenizer,
+        max_vocab_size=max_vocab_size,
+        max_seq_len=max_seq_len,
+    )
+
+
+
+def load_rte(
+    meta,
+    tokenizer=None,
+    max_vocab_size=20_000,
+    max_seq_len=200,
+):
+    return load_sequence_pair_dataset(
+        "data/GLUE/RTE",
         meta=meta,
         tokenizer=tokenizer,
         max_vocab_size=max_vocab_size,
