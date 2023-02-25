@@ -16,6 +16,66 @@ from transformers import AutoTokenizer
 from util import Config
 
 
+class SingleSequenceData:
+    def __init__(
+        self,
+        ids,
+        sequences,
+        labels,
+        tokenizer,
+        device,
+        data_type="test",
+        max_length=100,
+    ):
+        self.ids = ids
+        self.sequences = sequences
+        self.labels = labels
+        self.max_length = max_length
+        self.tokenizer = tokenizer
+        self.device = device
+        self.data_type = data_type
+
+    def __len__(self):
+        return len(self.sentence)
+
+    def __getitem__(self, item):
+        toks = self.tokenizer.tokenize(self.sequences[item])
+        label = self.labels[item]
+
+        if len(toks) > self.max_length:
+            toks = toks[: self.max_length]
+
+        ########################################
+        # Forming the inputs
+        tok_ids = self.tokenizer.convert_tokens_to_ids(toks)
+        tok_type_id = [0] * len(ids)
+        att_mask = [1] * len(ids)
+
+        # Padding
+        pad_len = self.max_length - len(ids)
+        ids = ids + [2] * pad_len
+        tok_type_id = tok_type_id + [0] * pad_len
+        att_mask = att_mask + [0] * pad_len
+
+        ########################################
+        # Forming the label
+        if self.data_type != "test":
+            label = label + [2] * pad_len
+        else:
+            label = 1
+
+        return {
+            "input_ids": torch.tensor(ids, dtype=torch.long, device=self.device),
+            "token_type_ids": torch.tensor(
+                tok_type_id, dtype=torch.long, device=self.device
+            ),
+            "attention_mask": torch.tensor(
+                att_mask, dtype=torch.long, device=self.device
+            ),
+            "target": torch.tensor(label, dtype=torch.long, device=self.device),
+        }
+
+
 class BucketIterator(Iterator):
     """
     Creates a bucket iterator which uses a look-ahead heuristic to batch
@@ -148,8 +208,9 @@ class TokenizerVocabWrapper:
         return self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(instance))
 
 
-
-def make_iterable(dataset, device, batch_size=32, train=False, indices=None, bucket=False):
+def make_iterable(
+    dataset, device, batch_size=32, train=False, indices=None, bucket=False
+):
     """
     Construct a DataLoader from a podium Dataset
     """
@@ -205,7 +266,6 @@ class Instance:
 
     def __repr__(self):
         return f"{self.index}: {self.length}, {self.label}"
-
 
 
 class MaxLenHook:
@@ -306,7 +366,6 @@ def load_mnli(
         max_vocab_size=max_vocab_size,
         max_seq_len=max_seq_len,
     )
-
 
 
 def load_rte(

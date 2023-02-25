@@ -412,7 +412,8 @@ class Experiment:
 
             y = batch.label
             y_true_list.append(y.squeeze(0) if y.numel() == 1 else y.squeeze())
-            logits, return_dict = model(x)
+            output, return_dict = model(x)
+            logits = output.logits
             logit_list.append(logits)
 
             # Bookkeeping and cast label to float
@@ -482,7 +483,8 @@ class Experiment:
 
                 y_true_list.append(y.cpu())
 
-                logits, _ = model(x)
+                output, _ = model(x)
+                loss, logits = output.loss, output.logits
 
                 logit_list.append(logits.cpu())
 
@@ -502,9 +504,6 @@ class Experiment:
         logit_tensor = torch.cat(logit_list)
         y_true = torch.cat(y_true_list)
         probs = logits_to_probs(logit_tensor)
-        true_probs = (
-            probs.gather(dim=1, index=y_true.unsqueeze(dim=1)).squeeze().numpy()
-        )
         y_pred = torch.argmax(probs, dim=1).numpy()
         f1_micro = f1_score(y_true=y_true, y_pred=y_pred, average="micro")
         f1_macro = f1_score(y_true=y_true, y_pred=y_pred, average="macro")

@@ -162,14 +162,12 @@ class Transformer2(nn.Module, AcquisitionModel):
             token_type_ids=token_type_ids,
             output_hidden_states=True,
         )
-        loss = output.loss
-        logits = output.logits
         hidden_states = output.hidden_states
         e = hidden_states[0].mean(dim=1)
         hidden = hidden_states[-1][:, 0, :]
-        return_dict = {"embeddings": e, "encoded": hidden, "loss": loss}
+        return_dict = {"embeddings": e, "encoded": hidden}
 
-        return logits, return_dict
+        return output, return_dict
 
     def predict_probs(self, inputs, lengths=None):
         with torch.inference_mode():
