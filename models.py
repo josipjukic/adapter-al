@@ -343,7 +343,7 @@ TRANSFORMER_CLASSIFIERS = {
 
 
 models = {
-    "BERT": partial(Transformer, name="BERT"),
+    "BERT": partial(Transformer2, name="BERT"),
     "ALBERT": partial(Transformer, name="ALBERT"),
     "ELECTRA": partial(Transformer, name="ELECTRA"),
     "DistilBERT": partial(Transformer, name="DistilBERT"),
