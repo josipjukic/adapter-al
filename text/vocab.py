@@ -22,7 +22,7 @@ from typing import (
 
 import numpy as np
 
-from general_utils import repr_type_and_attrs
+from .general_utils import repr_type_and_attrs
 
 
 T = TypeVar("T", bound=Hashable)

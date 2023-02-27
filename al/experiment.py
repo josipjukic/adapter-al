@@ -12,7 +12,8 @@ from dataloaders import *
 from smoothness.random_forest import WaveletsForestRegressor
 
 from util import logits_to_probs, compute_forgetfulness
-from podium import Iterator
+from text.iterator import Iterator
+from dataloaders import make_iterable
 
 import math
 import wandb
@@ -39,8 +40,8 @@ class Experiment:
         )
 
         # self.test_lengths = self.extract_test_lengths()
-        self.test_id_mapping = self.get_test_id_mapping()
-        self.ind2id, self.id2ind = self.create_id_mapping()
+        # self.test_id_mapping = self.get_test_id_mapping()
+        # self.ind2id, self.id2ind = self.create_id_mapping()
 
     def create_id_mapping(self):
         def cast_to_device(data):
@@ -394,7 +395,7 @@ class Experiment:
 
             optimizer.zero_grad()
 
-            ids.extend([int(id[0]) for id in batch.id])
+            ids.extend([id for id in batch.id])
 
             # Unpack batch & cast to device
             if self.meta.pair_sequence:

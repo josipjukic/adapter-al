@@ -27,10 +27,9 @@ from typing import (
 import numpy as np
 import pandas as pd
 
-from field import Field, unpack_fields
-from general_utils import repr_type_and_attrs
-
-from example_factory import Example, ExampleFactory
+from .field import Field, unpack_fields
+from .general_utils import repr_type_and_attrs
+from .example_factory import Example, ExampleFactory
 
 
 FieldType = Optional[Union[Field, List[Field]]]

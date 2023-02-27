@@ -2,9 +2,8 @@ import os
 
 import pandas as pd
 
-from dataset import Dataset
-
-from example_factory import ExampleFactory
+from .dataset import Dataset
+from .example_factory import ExampleFactory
 
 
 class TabularDataset(Dataset):

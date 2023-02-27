@@ -9,8 +9,8 @@ from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from general_utils import repr_type_and_attrs
-from vocab import Vocab
+from .general_utils import repr_type_and_attrs
+from .vocab import Vocab
 
 
 class HookType(Enum):

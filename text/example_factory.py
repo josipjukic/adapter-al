@@ -11,7 +11,7 @@ from typing import Union
 
 import pandas as pd
 
-from general_utils import repr_type_and_attrs
+from .general_utils import repr_type_and_attrs
 
 
 class ExampleFormat(Enum):

@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     meta = Config()
 
-    (train, val, test), vocab = dataloader(meta=meta, tokenizer=tokenizer)
+    (train, val, test) = dataloader(meta=meta, tokenizer=tokenizer)
 
     if args.data in pair_sequence_datasets:
         meta.pair_sequence = True
