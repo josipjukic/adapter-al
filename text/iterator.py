@@ -626,3 +626,12 @@ class BucketIterator(Iterator):
             "look_ahead_multiplier": self.look_ahead_multiplier,
         }
         return repr_type_and_attrs(self, attrs, with_newlines=True)
+
+
+class TorchIteratorWrapper:
+    def __init__(self, iterator):
+        self.iterator = Iterator
+
+    def __iter__(self):
+        batch = next(self.iterator)
+        return batch
