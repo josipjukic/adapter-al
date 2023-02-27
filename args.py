@@ -42,7 +42,7 @@ def make_parser():
     parser.add_argument(
         "--data",
         type=str,
-        default="TREC-2",
+        default="TREC-6",
         help="Data corpus.",
     )
     parser.add_argument(
@@ -52,9 +52,9 @@ def make_parser():
         help="Model: [BERT, RoBERTa]",
     )
 
-    parser.add_argument("--lr", type=float, default=2e-5, help="initial learning rate")
+    parser.add_argument("--lr", type=float, default=1e-4, help="initial learning rate")
     parser.add_argument("--clip", type=float, default=1.0, help="gradient clipping")
-    parser.add_argument("--epochs", type=int, default=20, help="upper epoch limit")
+    parser.add_argument("--epochs", type=int, default=50, help="upper epoch limit")
     parser.add_argument(
         "--batch-size", type=int, default=32, metavar="N", help="batch size"
     )
@@ -112,7 +112,7 @@ def make_parser():
     parser.add_argument(
         "--al-samplers",
         nargs="+",
-        default=["random", "entropy", "entropy_dropout", "dal", "core_set"],
+        default=["random", "entropy_dropout"],
         choices=[
             "random",
             "entropy",
@@ -135,7 +135,7 @@ def make_parser():
         "--query-size", type=int, default=50, help="Active learning query size."
     )
     parser.add_argument(
-        "--warm-start-size", type=int, default=50, help="Initial AL batch size."
+        "--warm-start-size", type=int, default=100, help="Initial AL batch size."
     )
     parser.add_argument(
         "--max-train-size", type=int, default=1000, help="Maximum train set size."

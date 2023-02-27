@@ -610,8 +610,8 @@ class Experiment:
         pvi_tensor = pvi_tensor[inds]
 
         return pvi_tensor
-    
-     def calculate_mdl(
+
+    def calculate_mdl(
         self,
         create_model_fn,
         criterion,
@@ -669,7 +669,7 @@ class Experiment:
                     codelenghts.append(block_loss / np.log(2))
 
         return codelenghts, halt_list
-    
+
     def _online_coding(self, model, optimizer, criterion, train_iter, halt):
         model.train()
 
@@ -738,7 +738,6 @@ class Experiment:
 
         return block_loss_tensor.mean()
 
-
     def _evaluate_online_coding(self, model, optimizer, criterion):
         model.eval()
 
@@ -781,7 +780,6 @@ class Experiment:
                 loss = criterion(logits.view(-1, self.meta.num_targets).squeeze(), y)
                 loss_item = loss.sum().item()
                 total_loss += loss_item
-
 
         return total_loss / num_examples
 
