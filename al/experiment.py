@@ -528,6 +528,263 @@ class Experiment:
 
         return result_dict
 
+    def calculate_predictive_entropy(
+        self,
+        create_model_fn,
+        criterion,
+    ):
+
+        # 1) Train model on labeled data.
+        model = create_model_fn(self.args, self.meta)
+        model.to(self.device)
+
+        train_iter = make_iterable(
+            self.train_set,
+            self.device,
+            batch_size=self.batch_size,
+            train=True,
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            self.args.lr,
+            weight_decay=self.args.l2,
+        )
+
+        for epoch in range(1, self.args.epochs + 1):
+            logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
+            # a) Train for one epoch
+            _, _, y_true, _ = self._train_model(model, optimizer, criterion, train_iter)
+        y_dist = y_true.bincount() / y_true.shape[0]
+
+        # 2) Calculate predictive entropy
+        pvi = self._evaluate_entropy(model, y_dist)
+
+        return pvi
+
+    def _evaluate_entropy(self, model, y_dist):
+        model.eval()
+
+        N = len(self.train_set)
+        iter_ = make_iterable(
+            self.train_set,
+            self.device,
+            batch_size=1,
+            train=False,  # [Debug] was False
+        )
+
+        hy = 0
+        hyx = 0
+        pvis = []
+        with torch.inference_mode():
+            ids = []
+            for batch_num, batch in enumerate(iter_):
+                t = time.time()
+
+                ids.extend([int(id[0]) for id in batch.id])
+
+                # Unpack batch & cast to device
+                (x, lengths), y = batch.text, batch.label
+
+                y = y.squeeze()  # y needs to be a 1D tensor for xent(batch_size)
+                probs = model.predict_probs(x, lengths).ravel()
+                prob_i = probs[y]
+                y_prime_i = y_dist[y]
+
+                hy -= 1 / N * torch.log(y_prime_i)
+                hyx -= 1 / N * torch.log(prob_i)
+                pvi = -torch.log(y_prime_i) + torch.log(prob_i)
+                pvis.append(pvi)
+
+                print(
+                    "[Batch]: {}/{} in {:.5f} seconds".format(
+                        batch_num, len(iter_), time.time() - t
+                    ),
+                    end="\r",
+                    flush=True,
+                )
+
+        pvi_tensor = torch.tensor(pvis)
+
+        # Preserve instance ordering
+        inds = np.argsort([self.id2ind[id] for id in ids])
+        pvi_tensor = pvi_tensor[inds]
+
+        return pvi_tensor
+    
+     def calculate_mdl(
+        self,
+        create_model_fn,
+        criterion,
+    ):
+
+        # 1) Train model on labeled data.
+        model = create_model_fn(self.args, self.meta)
+        model.to(self.device)
+
+        # train_iter = make_iterable(
+        #     self.train_set,
+        #     self.device,
+        #     batch_size=self.batch_size,
+        #     train=False,  # No shuffling to ensure that same instances belong to the same block.
+        # )
+
+        def cast_to_device(data):
+            return torch.tensor(np.array(data), device=self.device)
+
+        train_iter = Iterator(
+            self.train_set,
+            batch_size=self.batch_size,
+            shuffle=False,
+            matrix_class=cast_to_device,
+        )
+
+        train_iter = list(train_iter)
+
+        ids = []
+        for batch in train_iter:
+            ids.extend([int(id[0]) for id in batch.id])
+
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            self.args.lr,
+            weight_decay=self.args.l2,
+        )
+
+        N = len(self.train_set)
+        max_power = 12
+        halt_list = [2 ** x // self.batch_size for x in range(6, max_power + 1)]
+        codelenghts = []
+
+        block_losses = []
+        for halt in halt_list:
+            for epoch in range(1, self.args.epochs + 1):
+                logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
+                # Train for one epoch
+                train_loss = self._online_coding(
+                    model, optimizer, criterion, train_iter, halt
+                )
+                block_loss = self._evaluate_online_coding(model, optimizer, criterion)
+                if epoch == self.args.epochs:
+                    block_losses.append(block_loss)
+                    codelenghts.append(block_loss / np.log(2))
+
+        return codelenghts, halt_list
+    
+    def _online_coding(self, model, optimizer, criterion, train_iter, halt):
+        model.train()
+
+        total_loss = 0.0
+        accuracy, confusion_matrix = 0, np.zeros(
+            (self.meta.num_labels, self.meta.num_labels), dtype=int
+        )
+
+        logit_list = []
+        y_true_list = []
+        num_examples = 0
+        halt = min(halt, len(train_iter))
+        block_loss = []
+        for batch_num, batch in enumerate(train_iter, 1):
+            t = time.time()
+
+            optimizer.zero_grad()
+
+            # Unpack batch & cast to device
+            (x, lengths), y = batch.text, batch.label
+
+            # y needs to be a 1D tensor for xent(batch_size)
+            y = y.squeeze()
+            y_true_list.append(y)
+
+            num_examples += y.shape[0]
+
+            logits, return_dict = model(x, lengths)
+
+            logit_list.append(logits)
+
+            # Bookkeeping and cast label to float
+            accuracy, confusion_matrix = Experiment.update_stats(
+                accuracy, confusion_matrix, logits, y
+            )
+            if logits.shape[-1] == 1:
+                # binary cross entropy, cast labels to float
+                y = y.type(torch.float)
+
+            losses = criterion(logits.view(-1, self.meta.num_targets).squeeze(), y)
+            block_loss.append(losses.detach().cpu())
+
+            loss = losses.mean()
+
+            total_loss += float(loss)
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.clip)
+            optimizer.step()
+
+            print(
+                "[Batch]: {}/{} in {:.5f} seconds".format(
+                    batch_num, halt, time.time() - t
+                ),
+                end="\r",
+                flush=True,
+            )
+
+            if batch_num >= halt:
+                break
+
+        loss = total_loss / len(train_iter)
+
+        logging.info(f"[Train acc]: {accuracy/num_examples*100:.3f}%")
+        block_loss_tensor = torch.cat(block_loss)
+
+        return block_loss_tensor.mean()
+
+
+    def _evaluate_online_coding(self, model, optimizer, criterion):
+        model.eval()
+
+        total_loss = 0.0
+        accuracy, confusion_matrix = 0, np.zeros(
+            (self.meta.num_labels, self.meta.num_labels), dtype=int
+        )
+
+        logit_list = []
+        y_true_list = []
+        num_examples = 0
+        total_loss = 0
+        with torch.inference_mode():
+            for batch_num, batch in enumerate(self.test_iter, 1):
+                t = time.time()
+
+                optimizer.zero_grad()
+
+                # Unpack batch & cast to device
+                (x, lengths), y = batch.text, batch.label
+
+                # y needs to be a 1D tensor for xent(batch_size)
+                y = y.squeeze()
+                y_true_list.append(y)
+
+                num_examples += y.shape[0]
+
+                logits, return_dict = model(x, lengths)
+
+                logit_list.append(logits)
+
+                # Bookkeeping and cast label to float
+                accuracy, confusion_matrix = Experiment.update_stats(
+                    accuracy, confusion_matrix, logits, y
+                )
+                if logits.shape[-1] == 1:
+                    # binary cross entropy, cast labels to float
+                    y = y.type(torch.float)
+
+                loss = criterion(logits.view(-1, self.meta.num_targets).squeeze(), y)
+                loss_item = loss.sum().item()
+                total_loss += loss_item
+
+
+        return total_loss / num_examples
+
     @staticmethod
     def update_stats(accuracy, confusion_matrix, logits, y):
         if logits.shape[-1] == 1:
