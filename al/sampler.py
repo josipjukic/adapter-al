@@ -56,7 +56,7 @@ class Sampler(ABC):
             index = 0
             for batch in iter:
                 x, lengths = batch.text
-                probs_i = model.predict_probs(x, lengths=lengths)
+                probs_i = model.predict_probs(x)
                 start = index
                 end = start + x.shape[0]
                 probs[start:end] += probs_i

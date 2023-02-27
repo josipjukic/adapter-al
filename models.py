@@ -92,11 +92,12 @@ class Transformer(nn.Module, AcquisitionModel):
             "encoded": hidden,
         }
 
-        return logits, return_dict
+        return output, return_dict
 
     def predict_probs(self, inputs, lengths=None):
         with torch.inference_mode():
-            logits, _ = self(inputs, lengths)
+            output, _ = self(inputs)
+            logits = output.logits
             if self.num_targets == 1:
                 # Binary classification
                 y_pred = torch.sigmoid(logits)
@@ -343,7 +344,7 @@ TRANSFORMER_CLASSIFIERS = {
 
 
 models = {
-    "BERT": partial(Transformer2, name="BERT"),
+    "BERT": partial(Transformer, name="BERT"),
     "ALBERT": partial(Transformer, name="ALBERT"),
     "ELECTRA": partial(Transformer, name="ELECTRA"),
     "DistilBERT": partial(Transformer, name="DistilBERT"),

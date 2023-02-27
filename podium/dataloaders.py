@@ -4,208 +4,13 @@ import torch
 import numpy as np
 import pandas as pd
 from functools import partial
-from podium import Vocab, Field, LabelField, Iterator
-from podium.datasets import TabularDataset
-from podium.vectorizers import GloVe
-from podium.utils.general_utils import repr_type_and_attrs
-
-from typing import Iterator as PythonIterator
-from typing import NamedTuple, Tuple
+from vocab import Vocab
+from field import Field, LabelField
+from iterator import Iterator, BucketIterator
+from tabular_datasets import TabularDataset
 
 
 from transformers import AutoTokenizer
-
-from util import Config
-
-from sklearn.preprocessing import LabelEncoder
-
-
-def chain(start, *funcs):
-    res = start
-    for func in funcs:
-        res = func(res)
-    return res
-
-
-class SingleSequenceData:
-    def __init__(
-        self,
-        ids,
-        sequences,
-        labels,
-        tokenizer,
-        device,
-        preprocessing,
-        data_type="test",
-        max_length=100,
-    ):
-        self.ids = ids
-        self.sequences = sequences
-        self.labels = labels
-        self.max_length = max_length
-        self.tokenizer = tokenizer
-        self.device = device
-        self.data_type = data_type
-        self.le = LabelEncoder()
-
-        self.processed = self.sequences
-        # for prepro in preprocessing:
-        #     self.processed = map(prepro, self.processed)
-        # self.processed = list(self.processed)
-        self.trans_labels = self.le.fit_transform(labels)
-
-    def __len__(self):
-        return len(self.sentence)
-
-    def __getitem__(self, item):
-        toks = self.tokenizer.tokenize(self.sequences[item])
-        label = self.trans_labels[item]
-
-        if len(toks) > self.max_length:
-            toks = toks[: self.max_length]
-
-        ########################################
-        # Forming the inputs
-        tok_ids = self.tokenizer.convert_tokens_to_ids(toks)
-        tok_type_id = [0] * len(tok_ids)
-        att_mask = [1] * len(tok_ids)
-
-        # Padding
-        pad_len = self.max_length - len(tok_ids)
-        if pad_len > 0:
-            tok_ids = tok_ids + [self.tokenizer.pad_token_id] * pad_len
-            tok_type_id = tok_type_id + [0] * pad_len
-            att_mask = att_mask + [0] * pad_len
-
-        ########################################
-
-        return {
-            "input_ids": torch.tensor(tok_ids, dtype=torch.long, device=self.device),
-            "token_type_ids": torch.tensor(
-                tok_type_id, dtype=torch.long, device=self.device
-            ),
-            "attention_mask": torch.tensor(
-                att_mask, dtype=torch.long, device=self.device
-            ),
-            "target": torch.tensor(label, dtype=torch.long, device=self.device),
-            "instance_id": self.ids[item],
-        }
-
-
-class BucketIterator(Iterator):
-    """
-    Creates a bucket iterator which uses a look-ahead heuristic to batch
-    examples in a way that minimizes the amount of necessary padding.
-
-    Uses a bucket of size N x batch_size, and sorts instances within the bucket
-    before splitting into batches, minimizing necessary padding.
-    """
-
-    def __init__(
-        self,
-        dataset=None,
-        batch_size=32,
-        sort_key=None,
-        shuffle=True,
-        seed=1,
-        matrix_class=np.array,
-        internal_random_state=None,
-        look_ahead_multiplier=100,
-        bucket_sort_key=None,
-    ):
-        """
-        Creates a BucketIterator with the given bucket sort key and look-ahead
-        multiplier (how many batch_sizes to look ahead when sorting examples for
-        batches).
-
-        Parameters
-        ----------
-        look_ahead_multiplier : int
-            Multiplier of ``batch_size`` which determines the size of the
-            look-ahead bucket.
-            If ``look_ahead_multiplier == 1``, then the BucketIterator behaves
-            like a normal Iterator.
-            If ``look_ahead_multiplier >= (num_examples / batch_size)``, then
-            the BucketIterator behaves like a normal iterator that sorts the
-            whole dataset.
-            Default is ``100``.
-            The callable object used to sort examples in the bucket.
-            If ``bucket_sort_key=None``, then the ``sort_key`` must not be ``None``,
-            otherwise a ``ValueError`` is raised.
-            Default is ``None``.
-
-        Raises
-        ------
-        ValueError
-            If sort_key and bucket_sort_key are both None.
-        """
-
-        if sort_key is None and bucket_sort_key is None:
-            raise ValueError(
-                "For BucketIterator to work, either sort_key or "
-                "bucket_sort_key must be != None."
-            )
-
-        super().__init__(
-            dataset,
-            batch_size,
-            sort_key=sort_key,
-            shuffle=shuffle,
-            seed=seed,
-            matrix_class=matrix_class,
-            internal_random_state=internal_random_state,
-        )
-
-        self.bucket_sort_key = bucket_sort_key
-        self.look_ahead_multiplier = look_ahead_multiplier
-
-    def __iter__(self) -> PythonIterator[Tuple[NamedTuple, NamedTuple]]:
-        step = self.batch_size * self.look_ahead_multiplier
-        dataset = self._dataset
-
-        # Fix: Shuffle dataset if the shuffle is turned on, only IF sort key is not none
-        if self._shuffle and self._sort_key is None:
-            indices = list(range(len(dataset)))
-            # Cache state prior to shuffle so we can use it when unpickling
-            self._shuffler_state = self.get_internal_random_state()
-            self._shuffler.shuffle(indices)
-            # dataset.shuffle_examples(random_state=self._shuffler_state)
-            dataset = dataset[indices]
-
-        # Determine the step where iteration was stopped for lookahead & within bucket
-        lookahead_start = (
-            self.iterations // self.look_ahead_multiplier * self.look_ahead_multiplier
-        )
-        batch_start = self.iterations % self.look_ahead_multiplier
-
-        if self._sort_key is not None:
-            dataset = dataset.sorted(key=self._sort_key)
-        for i in range(lookahead_start, len(dataset), step):
-            bucket = dataset[i : i + step]
-
-            if self.bucket_sort_key is not None:
-                bucket = bucket.sorted(key=self.bucket_sort_key)
-
-            for j in range(batch_start, len(bucket), self.batch_size):
-                batch_dataset = bucket[j : j + self.batch_size]
-                batch = self._create_batch(batch_dataset)
-
-                yield batch
-                self._iterations += 1
-
-        # prepare for new epoch
-        self._iterations = 0
-        self._epoch += 1
-
-    def __repr__(self) -> str:
-        attrs = {
-            "batch_size": self._batch_size,
-            "epoch": self._epoch,
-            "iteration": self._iterations,
-            "shuffle": self._shuffle,
-            "look_ahead_multiplier": self.look_ahead_multiplier,
-        }
-        return repr_type_and_attrs(self, attrs, with_newlines=True)
 
 
 class TokenizerVocabWrapper:
@@ -213,7 +18,7 @@ class TokenizerVocabWrapper:
         # Wrap BertTokenizer so the method signatures align with podium
         self.tokenizer = tokenizer
 
-    def get_padding_index(self):
+    def get_pad_token_id(self):
         return self.tokenizer.pad_token_id
 
     def __len__(self):
@@ -222,24 +27,6 @@ class TokenizerVocabWrapper:
     def numericalize(self, instance):
         # Equivalent to .encode, but I want to delineate the steps
         return self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(instance))
-
-
-class TokenizerVocabWrapper:
-    def __init__(self, tokenizer):
-        # Wrap BertTokenizer so the method signatures align with podium
-        self.tokenizer = tokenizer
-
-    def get_padding_index(self):
-        return self.tokenizer.pad_token_id
-
-    def __len__(self):
-        return len(self.tokenizer)
-
-    def numericalize(self, instance):
-        # Equivalent to .encode, but I want to delineate the steps
-        return self.tokenizer(
-            instance, return_token_type_ids=True, return_attention_mask=True
-        )
 
 
 def make_iterable(
@@ -691,20 +478,35 @@ def add_ids_to_files(root_folder):
 
 
 if __name__ == "__main__":
+    data_dir = "../data/SUBJ"
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    meta = Config()
-    df = pd.read_csv("data/SUBJ/train.csv", header=None, index_col=0)
-    ids = df.index.tolist()
-    sequences = df[1].tolist()
-    labels = df[2].tolist()
+    vocab = TokenizerVocabWrapper(tokenizer)
+    fields = [
+        Field("id", disable_batch_matrix=True),
+        Field(
+            name="text",
+            tokenizer=tokenizer.tokenize,
+            padding_token=vocab.get_pad_token_id(),
+            numericalizer=tokenizer.convert_tokens_to_ids,
+            posttokenize_hooks=[
+                remove_nonalnum,
+                MaxLenHook(200),
+                lowercase_hook,
+            ],
+        ),
+        LabelField("label"),
+    ]
 
-    ssd = SingleSequenceData(
-        ids=ids,
-        sequences=sequences,
-        labels=labels,
-        tokenizer=tokenizer,
-        device=None,
-        preprocessing=[str.lower],
+    train = TabularDataset(
+        os.path.join(data_dir, "train.csv"), format="csv", fields=fields
+    )
+    val = TabularDataset(
+        os.path.join(data_dir, "validation.csv"), format="csv", fields=fields
+    )
+    test = TabularDataset(
+        os.path.join(data_dir, "test.csv"), format="csv", fields=fields
     )
 
-    print(ssd[1])
+    train.finalize_fields()
+
+    print(train[0])
