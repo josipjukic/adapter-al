@@ -532,6 +532,7 @@ class Experiment:
         self,
         create_model_fn,
         criterion,
+        tokenizer,
     ):
 
         # 1) Train model on labeled data.
@@ -542,7 +543,7 @@ class Experiment:
             self.train_set,
             self.device,
             batch_size=self.batch_size,
-            train=True,
+            train=False,
         )
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -553,7 +554,9 @@ class Experiment:
         for epoch in range(1, self.args.epochs + 1):
             logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
             # a) Train for one epoch
-            _, _, y_true, _ = self._train_model(model, optimizer, criterion, train_iter)
+            _, _, y_true, _ = self._train_model(
+                model, optimizer, criterion, train_iter, tokenizer
+            )
         y_dist = y_true.bincount() / y_true.shape[0]
 
         # 2) Calculate predictive entropy
@@ -569,7 +572,7 @@ class Experiment:
             self.train_set,
             self.device,
             batch_size=1,
-            train=False,  # [Debug] was False
+            train=False,
         )
 
         hy = 0
@@ -580,7 +583,7 @@ class Experiment:
             for batch_num, batch in enumerate(iter_):
                 t = time.time()
 
-                ids.extend([int(id[0]) for id in batch.id])
+                ids.extend([id for id in batch.id])
 
                 # Unpack batch & cast to device
                 (x, lengths), y = batch.text, batch.label
@@ -605,11 +608,89 @@ class Experiment:
 
         pvi_tensor = torch.tensor(pvis)
 
-        # Preserve instance ordering
-        inds = np.argsort([self.id2ind[id] for id in ids])
-        pvi_tensor = pvi_tensor[inds]
-
         return pvi_tensor
+
+    def _compute_cartography(self, trends):
+        cartography_results = {}
+
+        is_correct = torch.stack(trends["is_correct"])
+        true_probs = torch.stack(trends["true_probs"])
+
+        cartography_results["correctness"] = (
+            is_correct.sum(dim=0).squeeze().detach().numpy()
+        )
+        cartography_results["confidence"] = (
+            true_probs.mean(dim=0).squeeze().detach().numpy()
+        )
+        cartography_results["variability"] = (
+            true_probs.std(dim=0).squeeze().detach().numpy()
+        )
+        cartography_results["forgetfulness"] = compute_forgetfulness(is_correct).numpy()
+        conf = cartography_results["confidence"]
+        cartography_results["threshold_closeness"] = conf * (1 - conf)
+
+        return cartography_results
+
+    def _cartography_epoch_train(self, logits, y_true, ids):
+        logits = logits.cpu()
+        y_true = y_true.cpu()
+        probs = logits_to_probs(logits)
+        true_probs = probs.gather(dim=1, index=y_true.unsqueeze(dim=1)).squeeze()
+        y_pred = torch.argmax(probs, dim=1)
+        is_correct = y_pred == y_true
+
+        return is_correct, true_probs
+
+    def cartography(
+        self,
+        create_model_fn,
+        criterion,
+        tokenizer,
+    ):
+        lab_mask = np.full(len(self.train_set), True)
+
+        # 1) Train model on labeled data.
+        logging.info(f"Training on {lab_mask.sum()}/{lab_mask.size} labeled data...")
+        # Create new model: re-train scenario.
+        model = create_model_fn(self.args, self.meta)
+        model.to(self.device)
+
+        indices, *_ = np.where(lab_mask)
+        train_iter = make_iterable(
+            self.train_set,
+            self.device,
+            batch_size=self.batch_size,
+            train=False,
+            indices=indices,
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(),
+            self.args.lr,
+            weight_decay=self.args.l2,
+        )
+
+        cartography_trends = {
+            "train": {"is_correct": [], "true_probs": []},
+        }
+        for epoch in range(1, self.args.epochs + 1):
+            logging.info(f"Training epoch: {epoch}/{self.args.epochs}")
+            # a) Train for one epoch
+            result_dict_train, logits, y_true, ids = self._train_model(
+                model, optimizer, criterion, train_iter, tokenizer
+            )
+
+            # b) Calculate epoch cartography
+            logging.info("Calculating cartography...")
+            #   i) train set
+            is_correct, true_probs = self._cartography_epoch_train(logits, y_true, ids)
+            cartography_trends["train"]["is_correct"].append(is_correct)
+            cartography_trends["train"]["true_probs"].append(true_probs)
+
+        # 2) Dataset cartography
+        logging.info("Computing dataset cartography...")
+        cartography_dict = self._compute_cartography(cartography_trends["train"])
+
+        return pd.DataFrame(cartography_dict)
 
     def calculate_mdl(
         self,
