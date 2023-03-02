@@ -12,7 +12,7 @@ from dataloaders import *
 from smoothness.random_forest import WaveletsForestRegressor
 
 from util import logits_to_probs, compute_forgetfulness
-from text.iterator import Iterator
+from text import SingleSequenceIterator
 from dataloaders import make_iterable
 
 import math
@@ -390,7 +390,9 @@ class Experiment:
         logit_list = []
         y_true_list = []
         ids = []
-        for batch_num, batch in enumerate(train_iter, 1):
+
+        iter_ = SingleSequenceIterator(train_iter)
+        for batch_num, batch in enumerate(iter_, 1):
             t = time.time()
 
             optimizer.zero_grad()
@@ -409,11 +411,15 @@ class Experiment:
                 x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 lengths = sequence1_lengths + sequence2_lengths + 1
             else:
-                (x, lengths) = batch.text
+                x = batch.input_ids
 
-            y = batch.label
+            y = batch.target
             y_true_list.append(y.squeeze(0) if y.numel() == 1 else y.squeeze())
-            output, return_dict = model(x)
+            output, return_dict = model(
+                x,
+                attention_mask=batch.attention_mask,
+                token_type_ids=batch.token_type_ids,
+            )
             logits = output.logits
             logit_list.append(logits)
 
@@ -575,8 +581,6 @@ class Experiment:
             train=False,
         )
 
-        hy = 0
-        hyx = 0
         pvis = []
         with torch.inference_mode():
             ids = []
@@ -593,10 +597,17 @@ class Experiment:
                 prob_i = probs[y]
                 y_prime_i = y_dist[y]
 
-                hy -= 1 / N * torch.log(y_prime_i)
-                hyx -= 1 / N * torch.log(prob_i)
-                pvi = -torch.log(y_prime_i) + torch.log(prob_i)
+                hy = -torch.log2(y_prime_i)
+                hyx = -torch.log2(prob_i)
+                pvi = hy - hyx
                 pvis.append(pvi)
+
+                # if batch_num == 0:
+                #     print("y prime", y_prime_i)
+                #     print("prob", prob_i)
+                #     print("Hy:", hy)
+                #     print("Hyx:", hyx)
+                #     print("PVI", pvi)
 
                 print(
                     "[Batch]: {}/{} in {:.5f} seconds".format(

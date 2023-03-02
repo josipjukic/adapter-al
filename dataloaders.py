@@ -298,7 +298,7 @@ def load_cola(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=128,
 ):
 
     return load_dataset(
@@ -377,7 +377,6 @@ def load_sequence_pair_dataset(
             numericalizer=tokenizer.convert_tokens_to_ids,
             include_lengths=True,
             posttokenize_hooks=[
-                remove_nonalnum,
                 MaxLenHook(max_seq_len),
                 lowercase_hook,
             ],
@@ -389,7 +388,6 @@ def load_sequence_pair_dataset(
             numericalizer=tokenizer.convert_tokens_to_ids,
             include_lengths=True,
             posttokenize_hooks=[
-                remove_nonalnum,
                 MaxLenHook(max_seq_len),
                 lowercase_hook,
             ],
@@ -433,9 +431,8 @@ def load_dataset(
             numericalizer=tokenizer.convert_tokens_to_ids,
             include_lengths=True,
             posttokenize_hooks=[
-                remove_nonalnum,
                 MaxLenHook(max_seq_len),
-                lowercase_hook,
+                # lowercase_hook,
             ],
         ),
         LabelField("label"),

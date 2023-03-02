@@ -102,6 +102,7 @@ if __name__ == "__main__":
     pvi_result = experiment.calculate_predictive_entropy(
         create_model_fn=initialize_model, criterion=criterion, tokenizer=tokenizer
     )
+    print(pvi_result)
     df["pvi"] = pvi_result
 
     df.to_csv(f"stats/{args.model}-{args.data}-{args.adapter}.csv")

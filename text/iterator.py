@@ -15,6 +15,7 @@ import torch
 
 from .dataset import Dataset, DatasetBase
 from .general_utils import repr_type_and_attrs
+from util import Config
 
 
 class Batch(dict):
@@ -648,13 +649,15 @@ class SingleSequenceIterator:
         instance_ids = batch.id
         target = batch.label
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-            "target": target,
-            "instance_ids": instance_ids,
-        }
+        return Config(
+            {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+                "target": target,
+                "instance_ids": instance_ids,
+            }
+        )
 
 
 class SequencePairIterator:
