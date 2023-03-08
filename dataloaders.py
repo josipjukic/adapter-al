@@ -28,7 +28,7 @@ class TokenizerVocabWrapper:
 
 
 def make_iterable(
-    dataset, device, batch_size=32, train=False, indices=None, bucket=False
+    dataset, device, batch_size=32, shuffle=False, indices=None, bucket=False
 ):
     """
     Construct a DataLoader from a podium Dataset
@@ -39,7 +39,7 @@ def make_iterable(
         return -len(tokenized)
 
     def cast_to_device(data):
-        return torch.tensor(np.array(data), device=device)
+        return torch.tensor(data, device=device)
 
     # Selects examples at given indices to support subset iteration.
     if indices is not None:
@@ -50,7 +50,7 @@ def make_iterable(
             dataset,
             batch_size=batch_size,
             sort_key=instance_length,
-            shuffle=train,
+            shuffle=shuffle,
             matrix_class=cast_to_device,
             look_ahead_multiplier=20,
         )
@@ -58,7 +58,7 @@ def make_iterable(
         iterator = Iterator(
             dataset,
             batch_size=batch_size,
-            shuffle=train,
+            shuffle=shuffle,
             matrix_class=cast_to_device,
         )
 
@@ -429,7 +429,6 @@ def load_dataset(
             tokenizer=tokenizer.tokenize,
             padding_token=pad_index,
             numericalizer=tokenizer.convert_tokens_to_ids,
-            include_lengths=True,
             posttokenize_hooks=[
                 MaxLenHook(max_seq_len),
                 # lowercase_hook,

@@ -94,7 +94,7 @@ class Transformer(nn.Module, AcquisitionModel):
 
         return output, return_dict
 
-    def predict_probs(self, inputs, lengths=None):
+    def predict_probs(self, inputs, attention_mask=None, input_type_ids=None):
         with torch.inference_mode():
             output, _ = self(inputs)
             logits = output.logits
@@ -170,9 +170,12 @@ class Transformer2(nn.Module, AcquisitionModel):
 
         return output, return_dict
 
-    def predict_probs(self, inputs, lengths=None):
+    def predict_probs(self, inputs, attention_mask=None, token_type_ids=None):
         with torch.inference_mode():
-            logits, _ = self(inputs, lengths)
+            output, _ = self(
+                inputs, attention_mask=attention_mask, token_type_ids=token_type_ids
+            )
+            logits = output.logits
             if self.num_targets == 1:
                 # Binary classification
                 y_pred = torch.sigmoid(logits)
@@ -185,9 +188,14 @@ class Transformer2(nn.Module, AcquisitionModel):
     def get_encoder_dim(self):
         return self.classifier.config.hidden_size
 
-    def get_encoded(self, inputs, lengths=None):
+    def get_encoded(self, inputs, attention_mask=None, token_type_ids=None):
         with torch.inference_mode():
-            output = self.classifier(inputs, output_hidden_states=True)
+            output = self.classifier(
+                inputs,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                output_hidden_states=True,
+            )
             hidden = output.hidden_states[-1][:, 0, :]
             return hidden
 
@@ -220,6 +228,7 @@ def initialize_language_model(args, meta):
 
 TRANSFORMERS = {
     "BERT": "bert-base-uncased",
+    "BERT-CASED": "bert-base-cased",
     "ALBERT": "albert-base-v2",
     "ELECTRA": "google/electra-base-discriminator",
     "DistilBERT": "distilbert-base-uncased",
@@ -236,7 +245,8 @@ TRANSFORMER_CLASSIFIERS = {
 
 
 models = {
-    "BERT": partial(Transformer, name="BERT"),
+    "BERT": partial(Transformer2, name="BERT"),
+    "BERT-CASED": partial(Transformer2, name="BERT-CASED"),
     "ALBERT": partial(Transformer, name="ALBERT"),
     "ELECTRA": partial(Transformer, name="ELECTRA"),
     "DistilBERT": partial(Transformer, name="DistilBERT"),

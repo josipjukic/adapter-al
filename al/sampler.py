@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 from dataloaders import make_iterable
+from text.iterator import SingleSequenceIterator
 
 
 class Sampler(ABC):
@@ -22,7 +23,10 @@ class Sampler(ABC):
             self.dataset, self.device, batch_size=self.batch_size, indices=indices
         )
         out_list = []
-        for batch in iter:
+        iterator = SingleSequenceIterator(
+            iter, tokenizer=self.tokenizer, device=self.device
+        )
+        for batch in iterator:
             if self.meta.pair_sequence:
                 (x_sequence1, sequence1_lengths) = batch.sequence1
                 (x_sequence2, sequence2_lengths) = batch.sequence2
@@ -34,9 +38,13 @@ class Sampler(ABC):
                 x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 lengths = sequence1_lengths + sequence2_lengths + 1
             else:
-                (x, lengths) = batch.text
+                x = batch.input_ids
 
-            out = forward_fn(x, lengths=lengths)
+            out = forward_fn(
+                x,
+                attention_mask=batch.attention_mask,
+                token_type_ids=batch.token_type_ids,
+            )
             out_list.append(out)
 
         res = torch.cat(out_list)
@@ -54,9 +62,16 @@ class Sampler(ABC):
         # Dropout approximation for output probs.
         for _ in range(n_drop):
             index = 0
-            for batch in iter:
-                x, lengths = batch.text
-                probs_i = model.predict_probs(x)
+            iterator = SingleSequenceIterator(
+                iter, tokenizer=self.tokenizer, device=self.device
+            )
+            for batch in iterator:
+                x = batch.input_ids
+                probs_i = model.predict_probs(
+                    x,
+                    attention_mask=batch.attention_mask,
+                    token_type_ids=batch.token_type_ids,
+                )
                 start = index
                 end = start + x.shape[0]
                 probs[start:end] += probs_i
@@ -103,7 +118,10 @@ class Sampler(ABC):
 
         index = 0
 
-        for i, batch in enumerate(iter, 1):
+        iterator = SingleSequenceIterator(
+            iter, tokenizer=self.tokenizer, device=self.device
+        )
+        for batch in iterator:
             # print(f"Batch: {i}/{len(iter)}")
             if self.meta.pair_sequence:
                 (x_sequence1, sequence1_lengths) = batch.sequence1
@@ -116,11 +134,15 @@ class Sampler(ABC):
                 x = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 lengths = sequence1_lengths + sequence2_lengths + 1
             else:
-                (x, lengths) = batch.text
+                x = batch.input_ids
             start = index
             end = start + x.shape[0]
 
-            logits, return_dict = model(x, lengths=lengths)
+            logits, return_dict = model(
+                x,
+                attention_mask=batch.attention_mask,
+                input_type_ids=batch.input_type_ids,
+            )
             l1 = return_dict["encoded"]
             if num_targets == 1:
                 y_pred = torch.sigmoid(logits)

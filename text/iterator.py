@@ -637,27 +637,23 @@ class SingleSequenceIterator:
         self.device = device
 
     def __iter__(self):
-        batch = next(self.iterator)
-        input_ids = batch.text
-        attention_mask = torch.tensor(
-            input_ids != self.tokenizer.pad_token_id,
-            type=torch.int32,
-            device=self.device,
-        )
-        token_type_ids = torch.ones_like(input_ids, device=self.device)
+        for batch in self.iterator:
+            input_ids = batch.text
+            attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
+            token_type_ids = torch.ones_like(input_ids, device=self.device)
 
-        instance_ids = batch.id
-        target = batch.label
+            instance_ids = batch.id
+            target = batch.label
 
-        return Config(
-            {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "token_type_ids": token_type_ids,
-                "target": target,
-                "instance_ids": instance_ids,
-            }
-        )
+            yield Config(
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "token_type_ids": token_type_ids,
+                    "target": target,
+                    "instance_ids": instance_ids,
+                }
+            )
 
 
 class SequencePairIterator:
@@ -667,22 +663,26 @@ class SequencePairIterator:
         self.device = device
 
     def __iter__(self):
-        batch = next(self.iterator)
-        input_ids = batch.text
-        attention_mask = torch.tensor(
-            input_ids != self.tokenizer.pad_token_id,
-            type=torch.int32,
-            device=self.device,
-        )
-        token_type_ids = torch.ones_like(input_ids, device=self.device)
+        try:
+            for batch in self.iterator:
+                input_ids = batch.text
+                attention_mask = torch.tensor(
+                    input_ids != self.tokenizer.pad_token_id,
+                    type=torch.int32,
+                    device=self.device,
+                )
+                token_type_ids = torch.ones_like(input_ids, device=self.device)
 
-        instance_ids = batch.id
-        target = batch.label
+                instance_ids = batch.id
+                target = batch.label
 
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-            "target": target,
-            "instance_ids": instance_ids,
-        }
+                yield {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "token_type_ids": token_type_ids,
+                    "target": target,
+                    "instance_ids": instance_ids,
+                }
+
+        except StopIteration:
+            return
