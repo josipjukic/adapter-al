@@ -468,13 +468,17 @@ class Experiment:
             shuffle=True,
         )
 
+        iter_ = SingleSequenceIterator(
+            train_iter, tokenizer=tokenizer, device=self.device
+        )
+
         # special_tokens_mask = labels == tokenizer.mask_token_id
 
         for epoch in range(1, epochs + 1):
             logging.info(f"Training epoch: {epoch}/{epochs}")
 
             total_loss = 0
-            for batch_num, batch in enumerate(train_iter, 1):
+            for batch_num, batch in enumerate(iter_, 1):
                 # Unpack batch & cast to device
                 if self.meta.pair_sequence:
                     (x_sequence1, _) = batch.sequence1
@@ -486,7 +490,7 @@ class Experiment:
                     )
                     inputs = torch.cat([x_sequence1, sep_tensor, x_sequence2], dim=1)
                 else:
-                    (inputs, _) = batch.text
+                    inputs = batch.input_ids
                 labels = inputs.clone()
                 probability_matrix = torch.full(labels.shape, mlm_prob).to(self.device)
                 # TODO: account for special tokens (masked them out in the prob matrix)
@@ -733,13 +737,13 @@ class Experiment:
         model.eval()
 
         N = len(self.train_set)
-        iter_ = make_iterable(
+        iter = make_iterable(
             self.train_set,
             self.device,
             batch_size=1,
             shuffle=False,
         )
-
+        iter_ = SingleSequenceIterator(iter, tokenizer=tokenizer, device=self.device)
         pvis = []
         with torch.inference_mode():
             ids = []
@@ -749,10 +753,14 @@ class Experiment:
                 ids.extend([id for id in batch.id])
 
                 # Unpack batch & cast to device
-                (x, lengths), y = batch.text, batch.label
+                x, y = batch.input_ids, batch.target
 
                 y = y.squeeze()  # y needs to be a 1D tensor for xent(batch_size)
-                probs = model.predict_probs(x, lengths).ravel()
+                probs = model.predict_probs(
+                    x,
+                    attention_mask=batch.attention_mask,
+                    token_type_ids=batch.token_type_ids,
+                ).ravel()
                 prob_i = probs[y]
                 y_prime_i = y_dist[y]
 

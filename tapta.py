@@ -22,7 +22,7 @@ if __name__ == "__main__":
     if args.model in TRANSFORMERS.keys():
         tokenizer = AutoTokenizer.from_pretrained(TRANSFORMERS[args.model])
 
-    (train, val, test), vocab = dataloader(meta=meta, tokenizer=tokenizer)
+    (train, val, test) = dataloader(meta=meta, tokenizer=tokenizer)
 
     if args.data in pair_sequence_datasets:
         meta.pair_sequence = True
