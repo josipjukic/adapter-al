@@ -65,6 +65,8 @@ if __name__ == "__main__":
         meta_info = {
             "dataset": args.data,
             "model": args.model,
+            "adapter": args.adapter,
+            "pretrain": args.pretrain,
             "al_sampler": sampler_name,
             "warm_start_size": args.warm_start_size,
             "query_size": args.query_size,
