@@ -729,11 +729,11 @@ class Experiment:
         y_dist = y_true.bincount() / y_true.shape[0]
 
         # 2) Calculate predictive entropy
-        pvi = self._evaluate_entropy(model, y_dist)
+        pvi = self._evaluate_entropy(model, y_dist, tokenizer)
 
         return pvi
 
-    def _evaluate_entropy(self, model, y_dist):
+    def _evaluate_entropy(self, model, y_dist, tokenizer):
         model.eval()
 
         N = len(self.train_set)

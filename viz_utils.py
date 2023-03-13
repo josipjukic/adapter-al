@@ -27,6 +27,32 @@ def load_results(base_dir="results/", dataset="SUBJ", model="BERT"):
     return experiments, meta
 
 
+def load_results_multiple(
+    base_dir="results/",
+    dataset="SUBJ",
+    model="BERT",
+    adapter="fft",
+    tapta=False,
+):
+    experiments = {}
+    start_string = f"{dataset}-{model}"
+    print(start_string)
+    for filename in os.listdir(base_dir):
+        if filename.startswith(start_string) and filename.endswith(".pkl"):
+            splits = filename.split("-")
+            if adapter == splits[2]:
+                if tapta:
+                    if splits[4] != "lm=adapter":
+                        continue
+                with open(os.path.join(base_dir, filename), "rb") as f:
+                    results, meta = pickle.load(f)
+                    experiments[meta["al_sampler"]] = results
+
+    del meta["al_sampler"]
+
+    return experiments, meta
+
+
 def al_auc(df, n=0):
     num_al_steps = df.index.get_level_values("al_iter").max() - n
     grouped = (
@@ -217,6 +243,16 @@ def extract_best_epoch(exp_set):
         if len(selected) > len(iter_vals):
             selected = selected[:-1]
 
+        # if "trained_on" in experiment:
+        #     trained_on = experiment["trained_on"]
+        # else:
+        #     trained_on = [] * len(iter_vals)
+
+        # if len(trained_on) > len(iter_vals):
+        #     trained_on = trained_on[:-1]
+
+        # print(trained_on)
+
         df_tr = pd.DataFrame(
             {
                 "al_iter": iter_vals,
@@ -226,6 +262,7 @@ def extract_best_epoch(exp_set):
                 "f1_micro": f1_micro,
                 "f1_macro": f1_macro,
                 "selected": selected,
+                # "trained_on": trained_on,
             }
         )
 
