@@ -134,3 +134,4 @@ pretrained/
 adapters/
 wandb/
 stats/
+.vscode/

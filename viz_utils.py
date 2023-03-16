@@ -52,6 +52,32 @@ def load_results_multiple(
 
     return experiments, meta
 
+def load_dataset_results(
+    base_dir="results/",
+    dataset="SUBJ",
+    model="BERT",
+):
+    experiments = []
+    start_string = f"{dataset}-{model}"
+    print(start_string)
+    for filename in os.listdir(base_dir):
+        if filename.startswith(start_string) and filename.endswith(".pkl"):
+            splits = filename.split("-")
+            # data = splits[0]
+            model = splits[1]
+            adapter = splits[2]
+            sampler = splits[3]
+            tapta = splits[4] != "lm=None" 
+            with open(os.path.join(base_dir, filename), "rb") as f:
+                results, meta = pickle.load(f)
+                meta["adapter"] = adapter
+                meta["tapta"] = tapta
+                meta["sampler"] = sampler
+                experiments.append((results, meta))
+                print(f"Loaded: {dataset}-{model}-{adapter}-tapta={tapta}-{sampler}")
+
+    return experiments
+
 
 def al_auc(df, n=0):
     num_al_steps = df.index.get_level_values("al_iter").max() - n
@@ -118,6 +144,20 @@ def results_to_df(experiments, mode="best", epoch=-1):
     new_df_tr = pd.concat(dfs_tr)
 
     return new_df_tr
+
+def experiment_to_df(experiment, mode="best", epoch=-1):
+    if mode not in MODE_DICT:
+        raise ValueError(
+            f"Mode {mode} is not supported. Choose 'last' or 'best' epoch."
+        )
+
+    extract_fn = MODE_DICT[mode]
+    if extract_fn == MODE_DICT["ith"]:
+        extract_fn = partial(extract_fn, epoch=epoch)
+
+    df_tr = extract_fn(experiment)
+
+    return df_tr
 
 
 def extract_cartography(crt, exp_index):

@@ -750,8 +750,6 @@ class Experiment:
             for batch_num, batch in enumerate(iter_):
                 t = time.time()
 
-                ids.extend([id for id in batch.id])
-
                 # Unpack batch & cast to device
                 x, y = batch.input_ids, batch.target
 
@@ -775,14 +773,6 @@ class Experiment:
                 #     print("Hy:", hy)
                 #     print("Hyx:", hyx)
                 #     print("PVI", pvi)
-
-                print(
-                    "[Batch]: {}/{} in {:.5f} seconds".format(
-                        batch_num, len(iter_), time.time() - t
-                    ),
-                    end="\r",
-                    flush=True,
-                )
 
         pvi_tensor = torch.tensor(pvis)
 
