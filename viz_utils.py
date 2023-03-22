@@ -52,6 +52,7 @@ def load_results_multiple(
 
     return experiments, meta
 
+
 def load_dataset_results(
     base_dir="results/",
     dataset="SUBJ",
@@ -64,10 +65,13 @@ def load_dataset_results(
         if filename.startswith(start_string) and filename.endswith(".pkl"):
             splits = filename.split("-")
             # data = splits[0]
-            model = splits[1]
-            adapter = splits[2]
-            sampler = splits[3]
-            tapta = splits[4] != "lm=None" 
+            offset = 0
+            if dataset in ["TREC-6", "AGN-4"]:
+                offset = 1
+            model = splits[1 + offset]
+            adapter = splits[2 + offset]
+            sampler = splits[3 + offset]
+            tapta = splits[4 + offset] != "lm=None"
             with open(os.path.join(base_dir, filename), "rb") as f:
                 results, meta = pickle.load(f)
                 meta["adapter"] = adapter
@@ -144,6 +148,7 @@ def results_to_df(experiments, mode="best", epoch=-1):
     new_df_tr = pd.concat(dfs_tr)
 
     return new_df_tr
+
 
 def experiment_to_df(experiment, mode="best", epoch=-1):
     if mode not in MODE_DICT:

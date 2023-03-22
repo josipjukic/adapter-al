@@ -160,7 +160,7 @@ def load_agn4(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=256,
 ):
 
     return load_dataset(
@@ -251,7 +251,7 @@ def load_sst(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=128,
 ):
     return load_dataset(
         "data/GLUE/SST-2",
@@ -282,7 +282,7 @@ def load_trec6(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=128,
 ):
 
     return load_dataset(
@@ -314,7 +314,7 @@ def load_polarity(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=128,
 ):
 
     return load_dataset(
@@ -330,7 +330,7 @@ def load_subj(
     meta,
     tokenizer=None,
     max_vocab_size=20_000,
-    max_seq_len=200,
+    max_seq_len=128,
 ):
 
     return load_dataset(

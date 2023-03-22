@@ -75,6 +75,7 @@ if __name__ == "__main__":
             "seeds": seeds,
             "lr": args.lr,
             "l2": args.l2,
+            "stratified": args.stratified,
         }
 
         logging.info(meta_info)
@@ -127,7 +128,7 @@ if __name__ == "__main__":
         wandb.config = meta_info
         fname = (
             f"{args.data}-{args.model}-{args.adapter}-{sampler.name}-"
-            f"lm={args.pretrain}-e={args.epochs}-{start_time}.pkl"
+            f"lm={args.pretrain}-e={args.epochs}-s={args.stratified}-{start_time}.pkl"
         )
         meta_info["time"] = (
             datetime.now() - datetime.strptime(start_time, fmt)
