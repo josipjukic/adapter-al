@@ -894,7 +894,7 @@ class Experiment:
 
         N = len(self.train_set)
         max_power = 12
-        halt_list = [2 ** x // self.batch_size for x in range(6, max_power + 1)]
+        halt_list = [2**x // self.batch_size for x in range(6, max_power + 1)]
         codelenghts = []
 
         block_losses = []
